@@ -25,7 +25,7 @@ public class AiProperties {
     private final int historyTurns;
 
     public AiProperties(
-            @Value("${groq.api-key:}") String apiKey,
+            @Value("${groq.api-key:${GROQ_API_KEY:}}") String apiKey,   // application.yaml은 gitignore라 환경변수를 바로 읽어요
             @Value("${groq.base-url:https://api.groq.com/openai/v1}") String baseUrl,
             @Value("${groq.model:openai/gpt-oss-120b}") String model,
             @Value("${groq.reasoning-effort:low}") String reasoningEffort,
