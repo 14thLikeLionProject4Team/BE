@@ -116,7 +116,6 @@ public class MonthlyTextService {
             default -> body.append("부족분 ").append(s(f, "shortfall"))
                     .append("은 다음 용돈에서 빠져요. 다음 용돈 전에 직접 보낼 수도 있어요. ");
         }
-        if (!s(f, "kept").isEmpty()) body.append("남은 ").append(s(f, "kept")).append("은 모은 돈 주머니로 옮겨졌어요.");
         return Map.of("headline", headline, "body", body.toString().trim(),
                 "next_tip", "다음 달에도 결제일 6일 전에 청구 예정액을 한 번 확인해 봐요.");
     }
