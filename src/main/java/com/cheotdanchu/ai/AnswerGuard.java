@@ -30,6 +30,14 @@ public final class AnswerGuard {
             "투자해", "사 두세요", "추천해요",
             "카드가 나와요", "카드가 발급돼요", "신용점수가 올라");
 
+    /**
+     * 위기 표현. 분류(LLM)보다 먼저 검사해서, LLM이 안 돼도 위기 안내가 나가게 해요.
+     * 띄어쓰기를 빼고 비교해요. "협박"은 넣지 않아요 (대리입금 협박은 안전 카드가 답해요).
+     */
+    public static final List<String> CRISIS = List.of(
+            "죽고싶", "죽어버리", "자살", "자해", "사라지고싶", "없어지고싶", "살기싫",
+            "뛰어내리", "때려", "때렸", "폭행", "학대");
+
     private static final Pattern CONTACT = Pattern.compile("(?<!\\d)1\\d{2,3}(?!\\d)");
     private static final Pattern AMOUNT = Pattern.compile("\\d{1,3}(?:,\\d{3})+|\\d{4,}");
 
@@ -38,6 +46,14 @@ public final class AnswerGuard {
         if (text == null) return null;
         for (String w : FORBIDDEN) if (text.contains(w)) return w;
         return null;
+    }
+
+    /** 위기 표현이 있으면 true. */
+    public static boolean isCrisis(String text) {
+        if (text == null) return false;
+        String t = text.replaceAll("\\s+", "");
+        for (String w : CRISIS) if (t.contains(w)) return true;
+        return false;
     }
 
     /** 1388, 1332, 112 같은 상담·신고 번호. */

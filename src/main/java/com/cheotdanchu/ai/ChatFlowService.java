@@ -13,6 +13,7 @@ import java.util.Set;
 
 /**
  * 대화창 흐름. Colab 노트북의 chat()과 같은 순서예요.
+ *   위기 키워드 → 고정 위기 안내 (분류 전에 먼저 검사, LLM 안 씀)
  *   분류 → 금융지식: 검색 → RAG 답변 → 검사
  *        → 고민: 고민 대화 (위험 신호면 고정 안내)
  *        → 내숫자: MyNumbersProvider (LLM 안 씀)
@@ -53,6 +54,10 @@ public class ChatFlowService {
     public AiDtos.ChatResponse chat(String personaId, String childName, String message) {
         if (message == null || message.isBlank()) {
             return simple("범위밖", "메시지를 입력해 주세요.");
+        }
+        if (AnswerGuard.isCrisis(message)) {
+            // 이 대화는 메모로 만들지 않도록 저장하지 않아요. 부모님께도 알리지 않아요.
+            return new AiDtos.ChatResponse("고민", AnswerGuard.CRISIS_REPLY, List.of(), List.of(), List.of(), true, null);
         }
         String kind = classify(message);
         return switch (kind) {
