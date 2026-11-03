@@ -2,6 +2,7 @@ package com.cheotdanchu.ai;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -24,6 +25,7 @@ public class RagRepository {
     private final List<RagCard> cards;
     private final Map<String, RagCard> byId;
 
+    @Autowired   // 생성자가 두 개라 Spring이 쓸 생성자를 알려줘야 해요
     public RagRepository(AiProperties props) {
         this(load(props.ragFiles()));
     }
