@@ -31,6 +31,7 @@ CREATE TABLE accounts (
   bank_name      VARCHAR(20) NOT NULL COMMENT '은행명',
   account_number VARCHAR(30) NOT NULL COMMENT '계좌번호',
   balance        INT         NOT NULL DEFAULT 0 COMMENT '잔액',
+  carryover_balance INT      NOT NULL DEFAULT 0 COMMENT '지난달까지 남은 돈',
   PRIMARY KEY (account_id),
   UNIQUE KEY uk_accounts_member (member_id),
   FOREIGN KEY (member_id) REFERENCES members (member_id)
@@ -102,7 +103,6 @@ CREATE TABLE settlements (
   is_excluded    BOOLEAN  NOT NULL DEFAULT FALSE COMMENT '리포트 제외 여부',
   exclude_reason ENUM('PARENT_SUPPORT','CASH') NULL COMMENT '제외 사유',
   resolved_at    DATETIME NULL     COMMENT '완료 일시',
-  carryover_after INT     NULL     COMMENT '정산 후 지난달까지 남은 돈',
   PRIMARY KEY (settlement_id),
   UNIQUE KEY uk_settlements_family_period (family_id, period_end),
   FOREIGN KEY (family_id) REFERENCES families (family_id)
