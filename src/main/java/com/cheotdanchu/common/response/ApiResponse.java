@@ -5,4 +5,8 @@ public record ApiResponse<T>(boolean success, int code, String message, T data) 
     public static <T> ApiResponse<T> onSuccess(SuccessStatus status, T data) {
         return new ApiResponse<>(true, status.getCode(), status.getMessage(), data);
     }
+
+    public static <T> ApiResponse<T> onFailure(ErrorStatus status) {
+        return new ApiResponse<>(false, status.getCode(), status.getMessage(), null);
+    }
 }

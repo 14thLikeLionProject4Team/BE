@@ -7,7 +7,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum SuccessStatus {
 
-    PERSONA_LIST_OK(200, "페르소나 목록 조회 성공");
+    PERSONA_LIST_OK(200, "페르소나 목록 조회 성공"),
+    MISSION_ACTIVE_LIST_OK(200, "진행 중인 미션 목록 조회 성공");
 
     private final int code;
     private final String message;
