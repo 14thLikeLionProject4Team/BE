@@ -31,6 +31,7 @@ CREATE TABLE accounts (
   bank_name      VARCHAR(20) NOT NULL COMMENT '은행명',
   account_number VARCHAR(30) NOT NULL COMMENT '계좌번호',
   balance        INT         NOT NULL DEFAULT 0 COMMENT '잔액',
+  carryover_balance INT      NOT NULL DEFAULT 0 COMMENT '지난달까지 남은 돈',
   PRIMARY KEY (account_id),
   UNIQUE KEY uk_accounts_member (member_id),
   FOREIGN KEY (member_id) REFERENCES members (member_id)
