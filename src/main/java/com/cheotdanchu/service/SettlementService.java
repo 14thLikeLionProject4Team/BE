@@ -50,7 +50,7 @@ public class SettlementService {
                 .orElseThrow(() -> new GeneralException(ErrorStatus.SETTLEMENT_NOT_FOUND));
 
         Account account = accountRepository.findByMemberId(personaId)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.SETTLEMENT_NOT_FOUND));
+                .orElseThrow(() -> new GeneralException(ErrorStatus.ACCOUNT_NOT_FOUND));
 
         long billed = cardPaymentRepository.sumAmount(settlement.getSettlementId());
         long count = cardPaymentRepository.countBySettlementIdAndCanceledFalse(settlement.getSettlementId());

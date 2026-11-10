@@ -57,8 +57,8 @@ public class SeedLoader implements ApplicationRunner {
         Map<String, Object> accounts = (Map<String, Object>) seed.get("accounts");
         Map<String, Object> reference = (Map<String, Object>) seed.get("reference");
         Map<String, Object> today = (Map<String, Object>) reference.get("today");
-        int pocketNow = intOf(today.get("pocket_now"));
-        int pocketLeftover = intOf(today.get("pocket_leftover"));
+        int pocketNow = intOf(today, "pocket_now");
+        int pocketLeftover = intOf(today, "pocket_leftover");
 
         // 자녀 계좌 전체 잔액 = 이번 달 쓸 수 있는 돈 + 지난달까지 남은 돈. 부모 계좌 잔액은 시드에 없어 0
         Long parentAccountId = insertAccount(parentMemberId, accounts, "parent_account", 0, 0);
@@ -81,10 +81,10 @@ public class SeedLoader implements ApplicationRunner {
                 case "CARD_PAYMENT" -> jdbc.update(
                         "INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
                                 + "VALUES (?, ?, ?, ?, ?, FALSE, ?)",
-                        childMemberId, settlementId, str(l.get("merchant")), str(l.get("category")), intOf(l.get("amount")), at);
+                        childMemberId, settlementId, str(l.get("merchant")), str(l.get("category")), intOf(l, "amount"), at);
                 case "ALLOWANCE", "MISSION_REWARD" -> jdbc.update(
                         "INSERT INTO transfers (from_account_id, to_account_id, type, amount, transferred_at) VALUES (?, ?, ?, ?, ?)",
-                        parentAccountId, childAccountId, str(l.get("type")), intOf(l.get("amount")), at);
+                        parentAccountId, childAccountId, str(l.get("type")), intOf(l, "amount"), at);
                 default -> { } // 취소·상환·자동 정산 등은 해당 API를 만들 때 추가
             }
         }
@@ -123,7 +123,7 @@ public class SeedLoader implements ApplicationRunner {
         jdbc.update("INSERT INTO settlements (family_id, period_start, period_end, due_at, billed_amount, balance_at_due, paid_amount, status, result) "
                         + "VALUES (?, ?, ?, ?, ?, ?, ?, 'COMPLETED', ?)",
                 familyId, start, end, Timestamp.valueOf(end.atTime(settleTime)),
-                intOf(m.get("bill")), intOf(m.get("balance_before_settle")), intOf(m.get("settled")), result);
+                intOf(m, "bill"), intOf(m, "balance_before_settle"), intOf(m, "settled"), result);
         return false;
     }
 
@@ -140,7 +140,9 @@ public class SeedLoader implements ApplicationRunner {
         return o == null ? "" : o.toString();
     }
 
-    private static int intOf(Object o) {
-        return o instanceof Number n ? n.intValue() : 0;
+    /** 숫자여야 하는 값이 비었거나 숫자가 아니면 0으로 넘기지 않고 서버 시작을 멈춘다 (틀린 숫자가 조용히 들어가는 것을 막음) */
+    private static int intOf(Map<String, Object> row, String key) {
+        if (row.get(key) instanceof Number n) return n.intValue();
+        throw new IllegalStateException("seed 값이 숫자가 아니에요: " + key + " = " + row.get(key));
     }
 }

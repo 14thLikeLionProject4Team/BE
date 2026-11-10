@@ -63,6 +63,14 @@ class SettlementCurrentTest {
     }
 
     @Test
+    void 헤더가_숫자가_아니면_공통_형식의_400() throws Exception {
+        mockMvc.perform(get("/settlements/current").header("X-Persona-Id", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(400));
+    }
+
+    @Test
     void 헤더가_없으면_400() throws Exception {
         mockMvc.perform(get("/settlements/current"))
                 .andExpect(status().isBadRequest());
