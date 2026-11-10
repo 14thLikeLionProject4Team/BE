@@ -4,16 +4,18 @@ import com.cheotdanchu.ai.JsonUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,11 +35,22 @@ public class SeedLoader implements ApplicationRunner {
 
     private final JdbcTemplate jdbc;
     private final List<String> files;
+    private final SimpleJdbcInsert accountInsert;
+    private final SimpleJdbcInsert settlementInsert;
 
     public SeedLoader(JdbcTemplate jdbc,
                       @Value("${ai.seed.files:seed/family_a/seed.json,seed/family_b/seed.json}") String files) {
         this.jdbc = jdbc;
         this.files = Arrays.stream(files.split(",")).map(String::trim).filter(p -> !p.isEmpty()).toList();
+        // 생성된 ID를 바로 돌려받는다 (넣은 뒤 다시 조회하지 않기 위해).
+        // usingColumns 로 쓸 컬럼을 정해 두지 않으면 나머지 컬럼에 NULL이 들어가 NOT NULL DEFAULT 컬럼이 깨진다
+        this.accountInsert = new SimpleJdbcInsert(jdbc).withTableName("accounts")
+                .usingColumns("member_id", "bank_name", "account_number", "balance", "carryover_balance")
+                .usingGeneratedKeyColumns("account_id");
+        this.settlementInsert = new SimpleJdbcInsert(jdbc).withTableName("settlements")
+                .usingColumns("family_id", "period_start", "period_end", "due_at",
+                        "billed_amount", "balance_at_due", "paid_amount", "status", "result")
+                .usingGeneratedKeyColumns("settlement_id");
     }
 
     @Override
@@ -61,19 +74,22 @@ public class SeedLoader implements ApplicationRunner {
         int pocketLeftover = intOf(today, "pocket_leftover");
 
         // 자녀 계좌 전체 잔액 = 이번 달 쓸 수 있는 돈 + 지난달까지 남은 돈. 부모 계좌 잔액은 시드에 없어 0
-        Long parentAccountId = insertAccount(parentMemberId, accounts, "parent_account", 0, 0);
-        Long childAccountId = insertAccount(childMemberId, accounts, "child_account",
+        long parentAccountId = insertAccount(parentMemberId, accounts, "parent_account", 0, 0);
+        long childAccountId = insertAccount(childMemberId, accounts, "child_account",
                 pocketNow + pocketLeftover, pocketLeftover);
 
         LocalTime settleTime = LocalTime.parse(str(((Map<String, Object>) seed.get("rules")).get("settle_time")));
         String openCycle = null;
+        long settlementId = 0;
         for (Map<String, Object> m : (List<Map<String, Object>>) reference.get("monthly")) {
-            if (insertSettlement(familyId, m, settleTime)) openCycle = str(m.get("cycle"));
+            long id = insertSettlement(familyId, m, settleTime);
+            if (isOpen(m)) {
+                openCycle = str(m.get("cycle"));
+                settlementId = id;
+            }
         }
         if (openCycle == null) return; // 진행 중인 정산이 없는 가족 (성년 전환 후)
 
-        Long settlementId = jdbc.queryForObject(
-                "SELECT settlement_id FROM settlements WHERE family_id = ? AND status = 'SCHEDULED'", Long.class, familyId);
         for (Map<String, Object> l : (List<Map<String, Object>>) seed.get("ledger")) {
             if (!openCycle.equals(str(l.get("cycle")))) continue;
             Timestamp at = Timestamp.valueOf(LocalDate.parse(str(l.get("date"))).atTime(LocalTime.parse(str(l.get("time")))));
@@ -94,43 +110,54 @@ public class SeedLoader implements ApplicationRunner {
         return jdbc.queryForObject("SELECT member_id FROM members WHERE family_id = ? AND role = ?", Long.class, familyId, role);
     }
 
-    private Long insertAccount(Long memberId, Map<String, Object> accounts, String numberKey, int balance, int carryover) {
-        jdbc.update("INSERT INTO accounts (member_id, bank_name, account_number, balance, carryover_balance) VALUES (?, ?, ?, ?, ?)",
-                memberId, str(accounts.get("bank")), str(accounts.get(numberKey)), balance, carryover);
-        return jdbc.queryForObject("SELECT account_id FROM accounts WHERE member_id = ?", Long.class, memberId);
+    private long insertAccount(Long memberId, Map<String, Object> accounts, String numberKey, int balance, int carryover) {
+        return accountInsert.executeAndReturnKey(Map.of(
+                "member_id", memberId,
+                "bank_name", str(accounts.get("bank")),
+                "account_number", str(accounts.get(numberKey)),
+                "balance", balance,
+                "carryover_balance", carryover)).longValue();
     }
 
-    /** 정산 한 달치를 넣고, 진행 중인 달이면 true. 진행 중인 달은 청구액을 비워 둔다 (결제 합계로 계산) */
-    private boolean insertSettlement(Long familyId, Map<String, Object> m, LocalTime settleTime) {
+    private static boolean isOpen(Map<String, Object> month) {
+        return "진행 중".equals(str(month.get("status")));
+    }
+
+    /** 정산 한 달치를 넣고 생성된 ID를 돌려준다. 진행 중인 달은 청구액을 비워 둔다 (결제 합계로 계산) */
+    private long insertSettlement(Long familyId, Map<String, Object> m, LocalTime settleTime) {
         String[] period = str(m.get("period")).split(" ~ ");
-        LocalDate start = LocalDate.parse(period[0]);
         LocalDate end = LocalDate.parse(period[1]);
+
+        Map<String, Object> row = new HashMap<>();
+        row.put("family_id", familyId);
+        row.put("period_start", LocalDate.parse(period[0]));
+        row.put("period_end", end);
+        row.put("due_at", Timestamp.valueOf(end.atTime(settleTime)));
+        if (isOpen(m)) {
+            row.put("paid_amount", 0);
+            row.put("status", "SCHEDULED");
+        } else {
+            row.put("billed_amount", intOf(m, "bill"));
+            row.put("balance_at_due", intOf(m, "balance_before_settle"));
+            row.put("paid_amount", intOf(m, "settled"));
+            row.put("status", "COMPLETED");
+            row.put("result", resultOf(m));
+        }
+        return settlementInsert.executeAndReturnKey(row).longValue();
+    }
+
+    private static String resultOf(Map<String, Object> m) {
         String status = str(m.get("status"));
         String resolution = str(m.get("resolution"));
-
-        if ("진행 중".equals(status)) {
-            jdbc.update("INSERT INTO settlements (family_id, period_start, period_end, due_at, status) VALUES (?, ?, ?, ?, 'SCHEDULED')",
-                    familyId, start, end, Timestamp.valueOf(end.atTime(settleTime)));
-            return true;
-        }
-
-        String result;
-        if ("완납".equals(status)) result = "FULL_PAID";
-        else if (resolution.startsWith("스스로")) result = "SELF_RESOLVED";
-        else if (resolution.contains("자동 정산")) result = "AUTO_DEDUCTED";
-        else throw new IllegalStateException("알 수 없는 정산 결과예요: " + status + " / " + resolution);
-
-        jdbc.update("INSERT INTO settlements (family_id, period_start, period_end, due_at, billed_amount, balance_at_due, paid_amount, status, result) "
-                        + "VALUES (?, ?, ?, ?, ?, ?, ?, 'COMPLETED', ?)",
-                familyId, start, end, Timestamp.valueOf(end.atTime(settleTime)),
-                intOf(m, "bill"), intOf(m, "balance_before_settle"), intOf(m, "settled"), result);
-        return false;
+        if ("완납".equals(status)) return "FULL_PAID";
+        if (resolution.startsWith("스스로")) return "SELF_RESOLVED";
+        if (resolution.contains("자동 정산")) return "AUTO_DEDUCTED";
+        throw new IllegalStateException("알 수 없는 정산 결과예요: " + status + " / " + resolution);
     }
 
     private static String read(String path) {
-        try (InputStream in = SeedLoader.class.getClassLoader().getResourceAsStream(path)) {
-            if (in == null) throw new IllegalStateException("seed 파일이 없어요: resources/" + path);
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        try {
+            return new ClassPathResource(path).getContentAsString(StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new IllegalStateException("seed 파일을 읽지 못했어요: resources/" + path, e);
         }
