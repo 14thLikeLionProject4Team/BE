@@ -3,21 +3,26 @@ package com.cheotdanchu.service;
 import com.cheotdanchu.ai.SeedRepository;
 import com.cheotdanchu.common.exception.GeneralException;
 import com.cheotdanchu.common.response.ErrorStatus;
+import com.cheotdanchu.dto.MissionCreateRequest;
+import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionListResponse;
 import com.cheotdanchu.entity.Member;
 import com.cheotdanchu.entity.Mission;
 import com.cheotdanchu.entity.MissionSubmission;
+import com.cheotdanchu.entity.Notification;
 import com.cheotdanchu.entity.SubmissionPhoto;
 import com.cheotdanchu.repository.MemberRepository;
 import com.cheotdanchu.repository.MissionRepository;
 import com.cheotdanchu.repository.MissionSubmissionRepository;
+import com.cheotdanchu.repository.NotificationRepository;
 import com.cheotdanchu.repository.SubmissionPhotoRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +41,7 @@ public class MissionService {
     private final MissionRepository missionRepository;
     private final MissionSubmissionRepository submissionRepository;
     private final SubmissionPhotoRepository photoRepository;
+    private final NotificationRepository notificationRepository;
     private final SeedRepository seedRepository;
 
     public MissionListResponse getMissions(Long personaId, String status) {
@@ -57,6 +63,22 @@ public class MissionService {
                 .sum();
 
         return new MissionListResponse(missions.size(), totalReward, missions);
+    }
+
+    @Transactional
+    public MissionCreateResponse createMission(Long personaId, MissionCreateRequest req) {
+        Member parent = memberRepository.getPersona(personaId);
+        if (parent.getRole() != Member.Role.PARENT) throw new GeneralException(ErrorStatus.PARENT_ONLY);
+        if (req.endDate().isBefore(req.startDate())) throw new GeneralException(ErrorStatus.INVALID_PERIOD);
+
+        Mission mission = missionRepository.save(Mission.createByParent(parent.getFamily(), req));
+
+        memberRepository.findByFamily_FamilyIdAndRole(parent.getFamily().getFamilyId(), Member.Role.CHILD)
+                .ifPresent(child -> notificationRepository.save(Notification.of(
+                        child, Notification.Type.NEW_MISSION, "새 미션이 열렸어요", mission.getTitle(),
+                        mission.getMissionId(), LocalDateTime.now())));
+
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
     }
 
     public MissionDetailResponse getMission(Long personaId, Long missionId) {

@@ -2,13 +2,20 @@ package com.cheotdanchu.controller;
 
 import com.cheotdanchu.common.response.ApiResponse;
 import com.cheotdanchu.common.response.SuccessStatus;
+import com.cheotdanchu.dto.MissionCreateRequest;
+import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionListResponse;
 import com.cheotdanchu.service.MissionService;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,6 +32,15 @@ public class MissionController {
             @RequestHeader("X-Persona-Id") Long personaId,
             @RequestParam String status) {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_ACTIVE_LIST_OK, missionService.getMissions(personaId, status));
+    }
+
+    @Operation(summary = "미션 생성", description = "부모 전용. 새 미션을 바로 엽니다(NEW, origin PARENT). 자녀에게 NEW_MISSION 알림.")
+    @PostMapping("/missions")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<MissionCreateResponse> createMission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @Valid @RequestBody MissionCreateRequest request) {
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_CREATED, missionService.createMission(personaId, request));
     }
 
     @Operation(summary = "미션 상세 조회", description = "미션 한 건의 상세와 제출 이력(최신순, 사진 포함). 자녀·부모 공용. 다른 가족의 미션은 404.")

@@ -1,5 +1,6 @@
 package com.cheotdanchu.entity;
 
+import com.cheotdanchu.dto.MissionCreateRequest;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -15,6 +16,7 @@ import java.time.temporal.ChronoUnit;
 public class Mission {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long missionId;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -50,6 +52,23 @@ public class Mission {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Status status;
+
+    /** 부모가 만든 미션은 바로 열린다 (NEW) */
+    public static Mission createByParent(Family family, MissionCreateRequest req) {
+        Mission m = new Mission();
+        m.family = family;
+        m.title = req.title();
+        m.criteria = req.criteria();
+        m.missionType = req.missionType();
+        m.rewardAmount = req.rewardAmount();
+        m.startDate = req.startDate();
+        m.endDate = req.endDate();
+        m.repeatType = req.repeatType();
+        m.verifyMethod = req.verifyMethod();
+        m.origin = Origin.PARENT;
+        m.status = Status.NEW;
+        return m;
+    }
 
     /** 목표 횟수: 반복 주기와 기간으로 계산 (기간이 없으면 1회) */
     public int targetCount() {
