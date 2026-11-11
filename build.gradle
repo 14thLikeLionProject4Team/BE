@@ -33,6 +33,16 @@ dependencies {
 	testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
+// Windows 에서 Gradle 의 기본 문자셋이 MS949 라 한글(소스 문자열, data.sql)이 깨지는 것을 막는다
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8'
+}
+
+tasks.withType(JavaExec).configureEach {
+	defaultCharacterEncoding = 'UTF-8'
+}
+
 tasks.named('test') {
 	useJUnitPlatform()
+	defaultCharacterEncoding = 'UTF-8'
 }
