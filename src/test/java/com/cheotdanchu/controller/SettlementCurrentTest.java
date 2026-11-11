@@ -8,6 +8,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -54,10 +55,13 @@ class SettlementCurrentTest {
                 .andExpect(jsonPath("$.message").value("자녀만 조회할 수 있어요"));
     }
 
+    // 뽀로로(가족 B 자녀, id 4): 시드에 진행 중인 정산이 없다. 에러가 아니라 data 가 null 인 정상 응답
     @Test
-    void 진행_중인_정산이_없는_가족B는_404() throws Exception {
+    void 진행_중인_정산이_없는_가족B는_data가_null인_200() throws Exception {
         mockMvc.perform(get("/settlements/current").header("X-Persona-Id", 4))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").value(nullValue()));
     }
 
     @Test
