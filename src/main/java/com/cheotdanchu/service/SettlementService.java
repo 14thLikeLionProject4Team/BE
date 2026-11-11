@@ -20,6 +20,7 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -56,8 +57,14 @@ public class SettlementService {
         }
     }
 
+    /** 진행 중인 정산이 없는 가족(성년 전환 후 등)이면 null. 에러가 아니라 "정산 없음"이다 */
     public CurrentSettlementResponse getCurrent(Long personaId) {
-        Snapshot s = snapshot(personaId);
+        Member member = child(personaId);
+        LocalDate today = seedRepository.today();
+        Optional<Settlement> current = findCurrent(member, today);
+        if (current.isEmpty()) return null;
+
+        Snapshot s = snapshot(current.get(), account(personaId), today);
         // 결제 건수는 현재 정산 조회에서만 쓰므로 여기서만 센다 (점검 조회는 건수를 쓰지 않음)
         long count = cardPaymentRepository.countBySettlementIdAndCanceledFalse(s.settlement().getSettlementId());
 
@@ -77,8 +84,15 @@ public class SettlementService {
                 true); // 시연: 카드사 연동은 항상 켜짐 (연동 방식은 명세상 미정)
     }
 
+    /** 진행 중인 정산이 없으면 에러가 아니라 visible=false (날짜는 null, 청구액은 0) */
     public ShortfallCheckResponse getCheck(Long personaId) {
-        return check(snapshot(personaId));
+        Member member = child(personaId);
+        Account account = account(personaId);
+        LocalDate today = seedRepository.today();
+
+        return findCurrent(member, today)
+                .map(settlement -> check(snapshot(settlement, account, today)))
+                .orElseGet(() -> noSettlement(account));
     }
 
     /**
@@ -98,25 +112,37 @@ public class SettlementService {
                 gap, ShortfallCheckCopy.message(gap), ShortfallCheckCopy.guides(gap, s.carryover()));
     }
 
-    private Snapshot snapshot(Long personaId) {
+    private static ShortfallCheckResponse noSettlement(Account account) {
+        return new ShortfallCheckResponse(false, null, null, 0, availableOf(account), account.getCarryoverBalance(),
+                0, null, List.of());
+    }
+
+    private Member child(Long personaId) {
         Member member = memberRepository.getPersona(personaId);
         if (member.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.FORBIDDEN_ROLE);
+        return member;
+    }
 
-        LocalDate today = seedRepository.today();
-        Settlement settlement = settlementRepository
-                .findByFamilyIdAndPeriodStartLessThanEqualAndPeriodEndGreaterThanEqual(
-                        member.getFamily().getFamilyId(), today, today)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.SETTLEMENT_NOT_FOUND));
-
-        Account account = accountRepository.findByMemberId(personaId)
+    private Account account(Long personaId) {
+        return accountRepository.findByMemberId(personaId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.ACCOUNT_NOT_FOUND));
+    }
 
-        long billed = cardPaymentRepository.sumAmount(settlement.getSettlementId());
-        // 이번 달 쓸 수 있는 돈 = 계좌 전체 잔액 − 지난달까지 남은 돈 (용돈 + 미션 보상에서 부족분 송금 등으로 나간 돈을 뺀 값)
-        long available = account.getBalance() - account.getCarryoverBalance();
+    private Optional<Settlement> findCurrent(Member member, LocalDate today) {
+        return settlementRepository.findByFamilyIdAndPeriodStartLessThanEqualAndPeriodEndGreaterThanEqual(
+                member.getFamily().getFamilyId(), today, today);
+    }
 
+    private Snapshot snapshot(Settlement settlement, Account account, LocalDate today) {
         return new Snapshot(settlement,
                 ChronoUnit.DAYS.between(today, settlement.getDueAt().toLocalDate()),
-                billed, available, account.getCarryoverBalance());
+                cardPaymentRepository.sumAmount(settlement.getSettlementId()),
+                availableOf(account),
+                account.getCarryoverBalance());
+    }
+
+    /** 이번 달 쓸 수 있는 돈 = 계좌 전체 잔액 − 지난달까지 남은 돈 (용돈 + 미션 보상에서 부족분 송금 등으로 나간 돈을 뺀 값) */
+    private static long availableOf(Account account) {
+        return account.getBalance() - account.getCarryoverBalance();
     }
 }
