@@ -30,8 +30,7 @@ public class SettlementService {
     private final SeedRepository seedRepository;
 
     public CurrentSettlementResponse getCurrent(Long personaId) {
-        Member member = memberRepository.findById(personaId)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.PERSONA_NOT_FOUND));
+        Member member = memberRepository.getPersona(personaId);
         if (member.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.FORBIDDEN_ROLE);
 
         LocalDate today = seedRepository.today();
