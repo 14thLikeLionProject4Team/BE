@@ -5,6 +5,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "mission_submissions")
 @Getter
@@ -22,6 +24,9 @@ public class MissionSubmission {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ReviewStatus reviewStatus;
+
+    @Column(nullable = false)
+    private LocalDateTime submittedAt;
 
     public enum ReviewStatus { PENDING, APPROVED, REJECTED }
 }

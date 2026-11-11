@@ -24,10 +24,14 @@ public class Mission {
     @Column(nullable = false, length = 50)
     private String title;
 
+    @Column(length = 200)
+    private String criteria;
+
     @Enumerated(EnumType.STRING)
     private MissionType missionType;
 
     private Integer rewardAmount;
+    private Integer desiredReward;
 
     private LocalDate startDate;
     private LocalDate endDate;
@@ -35,6 +39,13 @@ public class Mission {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RepeatType repeatType;
+
+    @Enumerated(EnumType.STRING)
+    private VerifyMethod verifyMethod;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Origin origin;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -54,5 +65,7 @@ public class Mission {
 
     public enum MissionType { CHORE, FINANCE, HABIT }
     public enum RepeatType { ONCE, DAILY, WEEKLY, MONTHLY }
+    public enum VerifyMethod { PHOTO, DIRECT }
+    public enum Origin { PARENT, CHILD, AI }
     public enum Status { RECOMMENDED, PROPOSED, ON_HOLD, NEW, IN_PROGRESS, SUBMITTED, COMPLETED, CANCELED, EXPIRED }
 }
