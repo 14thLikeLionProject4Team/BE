@@ -91,10 +91,13 @@ class SettlementCurrentTest {
     // sql.init.mode=never 처럼 테이블이 남은 채로 다시 켜도 계좌가 중복으로 들어가 서버가 죽지 않아야 한다
     @Test
     void 시드_적재는_이미_데이터가_있으면_건너뛴다() {
+        Integer accountsBefore = jdbc.queryForObject("SELECT COUNT(*) FROM accounts", Integer.class);
+        Integer settlementsBefore = jdbc.queryForObject("SELECT COUNT(*) FROM settlements", Integer.class);
+
         seedLoader.run(null);
 
-        assertEquals(4, jdbc.queryForObject("SELECT COUNT(*) FROM accounts", Integer.class));
-        assertEquals(39, jdbc.queryForObject("SELECT COUNT(*) FROM settlements", Integer.class));
+        assertEquals(accountsBefore, jdbc.queryForObject("SELECT COUNT(*) FROM accounts", Integer.class));
+        assertEquals(settlementsBefore, jdbc.queryForObject("SELECT COUNT(*) FROM settlements", Integer.class));
     }
 
     @Test

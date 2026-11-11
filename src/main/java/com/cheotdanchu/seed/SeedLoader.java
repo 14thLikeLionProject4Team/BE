@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -95,7 +96,7 @@ public class SeedLoader implements ApplicationRunner {
 
         LocalTime settleTime = LocalTime.parse(str(((Map<String, Object>) seed.get("rules")).get("settle_time")));
         String openCycle = null;
-        long settlementId = 0;
+        Long settlementId = null;
         for (Map<String, Object> m : (List<Map<String, Object>>) reference.get("monthly")) {
             long id = insertSettlement(familyId, m, settleTime);
             if (isOpen(m)) {
@@ -103,16 +104,17 @@ public class SeedLoader implements ApplicationRunner {
                 settlementId = id;
             }
         }
-        if (openCycle == null) return; // 진행 중인 정산이 없는 가족 (성년 전환 후)
+        if (settlementId == null) return; // 진행 중인 정산이 없는 가족 (성년 전환 후)
 
+        // 용돈·미션 보상·취소·상환 등은 해당 API를 만들 때 추가
+        List<Object[]> payments = new ArrayList<>();
         for (Map<String, Object> l : (List<Map<String, Object>>) seed.get("ledger")) {
-            // 용돈·미션 보상·취소·상환 등은 해당 API를 만들 때 추가
             if (!openCycle.equals(str(l.get("cycle"))) || !"CARD_PAYMENT".equals(str(l.get("type")))) continue;
             Timestamp at = Timestamp.valueOf(LocalDate.parse(str(l.get("date"))).atTime(LocalTime.parse(str(l.get("time")))));
-            jdbc.update("INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
-                            + "VALUES (?, ?, ?, ?, ?, FALSE, ?)",
-                    childMemberId, settlementId, str(l.get("merchant")), str(l.get("category")), intOf(l, "amount"), at);
+            payments.add(new Object[]{childMemberId, settlementId, str(l.get("merchant")), str(l.get("category")), intOf(l, "amount"), at});
         }
+        jdbc.batchUpdate("INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
+                + "VALUES (?, ?, ?, ?, ?, FALSE, ?)", payments);
     }
 
     private Long memberId(Long familyId, String role) {
