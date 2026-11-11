@@ -18,10 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 @Service
@@ -42,15 +40,26 @@ public class SettlementService {
     private final AccountRepository accountRepository;
     private final SeedRepository seedRepository;
 
-    /** 현재 정산 조회와 부족 예상 점검이 함께 쓰는 계산 결과 */
-    private record Snapshot(Settlement settlement, long dDay, long billed, long available, long carryover) {}
+    /**
+     * 현재 정산 조회와 부족 예상 점검이 함께 쓰는 계산 결과. 서비스 안의 snapshot() 한 곳에서만 만든다
+     * (같은 타입 숫자가 여러 개라 곳곳에서 만들면 순서가 바뀌어도 컴파일되기 때문).
+     */
+    record Snapshot(Settlement settlement, long dDay, long billed, long available, long carryover) {
+
+        /** 부족 예상액(음수면 남는 돈) = 청구 예정액 − 이번 달 쓸 수 있는 돈. 지난달까지 남은 돈은 포함하지 않는다 */
+        long gap() {
+            return billed - available;
+        }
+
+        LocalDate dueDate() {
+            return settlement.getDueAt().toLocalDate();
+        }
+    }
 
     public CurrentSettlementResponse getCurrent(Long personaId) {
         Snapshot s = snapshot(personaId);
         // 결제 건수는 현재 정산 조회에서만 쓰므로 여기서만 센다 (점검 조회는 건수를 쓰지 않음)
         long count = cardPaymentRepository.countBySettlementIdAndCanceledFalse(s.settlement().getSettlementId());
-        // 부족 예상액은 지난달까지 남은 돈을 포함하지 않는다
-        long gap = s.billed() - s.available();
 
         return new CurrentSettlementResponse(
                 s.settlement().getSettlementId(),
@@ -63,15 +72,13 @@ public class SettlementService {
                 count,
                 s.available(),
                 s.carryover(),
-                Math.max(gap, 0),
-                Math.max(-gap, 0),
+                Math.max(s.gap(), 0),
+                Math.max(-s.gap(), 0),
                 true); // 시연: 카드사 연동은 항상 켜짐 (연동 방식은 명세상 미정)
     }
 
     public ShortfallCheckResponse getCheck(Long personaId) {
-        Snapshot s = snapshot(personaId);
-        return check(s.settlement().getDueAt().toLocalDate(), s.settlement().getStatus(),
-                s.dDay(), s.billed(), s.available(), s.carryover());
+        return check(snapshot(personaId));
     }
 
     /**
@@ -79,22 +86,16 @@ public class SettlementService {
      * 이번 달 쓸 수 있는 돈이 청구 예정액보다 적을 때만 보여준다.
      * 지난달까지 남은 돈으로 메울 수 있어도 보여주고, 안내에 남은 돈으로 갚을 수 있다고 알린다.
      */
-    static ShortfallCheckResponse check(LocalDate dueDate, Settlement.Status status,
-                                        long dDay, long billed, long available, long carryover) {
-        long gap = billed - available;
-        boolean visible = CHECK_STATUSES.contains(status) && gap > 0 && dDay >= 0 && dDay <= CHECK_START_D_DAY;
+    static ShortfallCheckResponse check(Snapshot s) {
+        long gap = s.gap();
+        boolean visible = CHECK_STATUSES.contains(s.settlement().getStatus())
+                && gap > 0 && s.dDay() >= 0 && s.dDay() <= CHECK_START_D_DAY;
         if (!visible) {
-            return new ShortfallCheckResponse(false, dueDate, dDay, billed, available, carryover, 0, null, List.of());
+            return new ShortfallCheckResponse(false, s.dueDate(), s.dDay(), s.billed(), s.available(), s.carryover(),
+                    0, null, List.of());
         }
-
-        List<String> guides = new ArrayList<>();
-        if (carryover >= gap) guides.add("지난달까지 남은 돈 " + won(carryover) + "원으로 갚을 수 있어요");
-        else if (carryover > 0) guides.add("지난달까지 남은 돈 " + won(carryover) + "원으로 일부 갚을 수 있어요");
-        guides.add("다음 용돈 전까지 직접 보내도 돼요");
-        guides.add("다른 사람에게 빌리지 마세요");
-
-        return new ShortfallCheckResponse(true, dueDate, dDay, billed, available, carryover, gap,
-                "지금 속도면 결제일에 " + won(gap) + "원이 모자랄 것 같아요", guides);
+        return new ShortfallCheckResponse(true, s.dueDate(), s.dDay(), s.billed(), s.available(), s.carryover(),
+                gap, ShortfallCheckCopy.message(gap), ShortfallCheckCopy.guides(gap, s.carryover()));
     }
 
     private Snapshot snapshot(Long personaId) {
@@ -117,9 +118,5 @@ public class SettlementService {
         return new Snapshot(settlement,
                 ChronoUnit.DAYS.between(today, settlement.getDueAt().toLocalDate()),
                 billed, available, account.getCarryoverBalance());
-    }
-
-    private static String won(long amount) {
-        return String.format(Locale.KOREA, "%,d", amount);
     }
 }

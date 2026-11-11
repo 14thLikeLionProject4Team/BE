@@ -3,6 +3,8 @@ package com.cheotdanchu.service;
 import com.cheotdanchu.dto.ShortfallCheckResponse;
 import com.cheotdanchu.entity.Settlement;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.BeanUtils;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -17,12 +19,19 @@ class ShortfallCheckTest {
 
     private static final LocalDate DUE = LocalDate.of(2026, 10, 25);
 
+    private ShortfallCheckResponse check(Settlement.Status status, long dDay, long billed, long available, long carryover) {
+        Settlement settlement = BeanUtils.instantiateClass(Settlement.class); // 생성자가 protected 라 리플렉션으로 만든다
+        ReflectionTestUtils.setField(settlement, "status", status);
+        ReflectionTestUtils.setField(settlement, "dueAt", DUE.atTime(18, 0));
+        return SettlementService.check(new SettlementService.Snapshot(settlement, dDay, billed, available, carryover));
+    }
+
     private ShortfallCheckResponse check(long dDay, long billed, long available, long carryover) {
-        return SettlementService.check(DUE, Settlement.Status.SCHEDULED, dDay, billed, available, carryover);
+        return check(Settlement.Status.SCHEDULED, dDay, billed, available, carryover);
     }
 
     private ShortfallCheckResponse check(Settlement.Status status) {
-        return SettlementService.check(DUE, status, 3, 79500, 73000, 59900);
+        return check(status, 3, 79500, 73000, 59900);
     }
 
     @Test
