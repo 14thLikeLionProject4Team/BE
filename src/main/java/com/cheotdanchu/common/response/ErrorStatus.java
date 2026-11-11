@@ -14,6 +14,7 @@ public enum ErrorStatus {
     INVALID_REQUEST_VALUE(400, "요청 값의 형식이 올바르지 않습니다"),
     CHILD_ONLY(403, "자녀만 조회할 수 있어요"),
     PARENT_ONLY(403, "부모만 할 수 있어요"),
+    ADULT_TRANSITIONED(403, "기록이 본인에게 넘어갔어요."),
     INVALID_INPUT(400, "입력값을 확인해 주세요"),
     INVALID_PERIOD(400, "끝나는 날은 시작일 이후여야 해요"),
     ACCOUNT_NOT_FOUND(404, "연결된 계좌를 찾을 수 없습니다");
