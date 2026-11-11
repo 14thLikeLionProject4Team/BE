@@ -1,5 +1,6 @@
 package com.cheotdanchu.controller;
 
+import com.cheotdanchu.seed.SeedLoader;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,6 +23,9 @@ class SettlementCurrentTest {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    SeedLoader seedLoader;
 
     // 루피(가족 A 자녀, id 2): 명세·시드 기준 숫자
     @Test
@@ -82,6 +86,15 @@ class SettlementCurrentTest {
         Integer diff = jdbc.queryForObject(
                 "SELECT balance - carryover_balance FROM accounts WHERE member_id = 2", Integer.class);
         assertEquals(73000, diff);
+    }
+
+    // sql.init.mode=never 처럼 테이블이 남은 채로 다시 켜도 계좌가 중복으로 들어가 서버가 죽지 않아야 한다
+    @Test
+    void 시드_적재는_이미_데이터가_있으면_건너뛴다() {
+        seedLoader.run(null);
+
+        assertEquals(4, jdbc.queryForObject("SELECT COUNT(*) FROM accounts", Integer.class));
+        assertEquals(39, jdbc.queryForObject("SELECT COUNT(*) FROM settlements", Integer.class));
     }
 
     @Test

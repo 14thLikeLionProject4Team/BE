@@ -1,6 +1,7 @@
 package com.cheotdanchu.seed;
 
 import com.cheotdanchu.ai.JsonUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -20,16 +21,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 서버가 켜질 때 seed.json 의 원장을 DB에 넣는다. (schema.sql 이 매번 테이블을 새로 만들므로 한 번만 실행됨)
+ * 서버가 켜질 때 seed.json 의 원장을 DB에 넣는다. (schema.sql 이 매번 테이블을 새로 만들므로 보통 한 번만 실행됨.
+ * spring.sql.init.mode=never 처럼 테이블이 남아 있는 채로 다시 켜면 계좌가 이미 있으므로 적재를 건너뛴다)
  *
  * 지금은 현재 정산 조회(GET /settlements/current)에 필요한 것만 넣는다.
  *  - accounts: 부모·자녀 계좌 (자녀 balance = 이번 달 쓸 수 있는 돈 + 지난달까지 남은 돈)
  *  - settlements: 월별 정산 이력 (진행 중인 달은 청구액을 비워 두고 카드 결제에서 계산)
- *  - card_payments, transfers(용돈·미션 보상): 진행 중인 정산 기간 것만
- * 과거 결제·취소·상환 등은 해당 API를 만들 때 추가한다.
+ *  - card_payments: 진행 중인 정산 기간 것만
+ * 과거 결제·취소·상환·이체 등은 해당 API를 만들 때 추가한다.
  *
  * families / members 는 data.sql 이 넣는다. 가족은 이름("가족 A")으로 찾는다.
  */
+@Slf4j
 @Component
 public class SeedLoader implements ApplicationRunner {
 
@@ -42,11 +45,10 @@ public class SeedLoader implements ApplicationRunner {
                       @Value("${ai.seed.files:seed/family_a/seed.json,seed/family_b/seed.json}") String files) {
         this.jdbc = jdbc;
         this.files = Arrays.stream(files.split(",")).map(String::trim).filter(p -> !p.isEmpty()).toList();
-        // 생성된 ID를 바로 돌려받는다 (넣은 뒤 다시 조회하지 않기 위해).
-        // usingColumns 로 쓸 컬럼을 정해 두지 않으면 나머지 컬럼에 NULL이 들어가 NOT NULL DEFAULT 컬럼이 깨진다
+        // usingColumns 로 쓸 컬럼을 정해 두지 않으면 나머지 컬럼에 NULL이 들어가 NOT NULL DEFAULT 컬럼이 깨진다.
+        // 정산은 카드 결제를 연결해야 해서 생성된 ID를 바로 돌려받는다 (넣은 뒤 다시 조회하지 않기 위해)
         this.accountInsert = new SimpleJdbcInsert(jdbc).withTableName("accounts")
-                .usingColumns("member_id", "bank_name", "account_number", "balance", "carryover_balance")
-                .usingGeneratedKeyColumns("account_id");
+                .usingColumns("member_id", "bank_name", "account_number", "balance", "carryover_balance");
         this.settlementInsert = new SimpleJdbcInsert(jdbc).withTableName("settlements")
                 .usingColumns("family_id", "period_start", "period_end", "due_at",
                         "billed_amount", "balance_at_due", "paid_amount", "status", "result")
@@ -55,6 +57,11 @@ public class SeedLoader implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        Integer accountCount = jdbc.queryForObject("SELECT COUNT(*) FROM accounts", Integer.class);
+        if (accountCount != null && accountCount > 0) {
+            log.info("계좌가 이미 있어서 시드 적재를 건너뜁니다.");
+            return;
+        }
         for (String path : files) load(JsonUtil.parseObject(read(path)), path);
     }
 
@@ -74,9 +81,8 @@ public class SeedLoader implements ApplicationRunner {
         int pocketLeftover = intOf(today, "pocket_leftover");
 
         // 자녀 계좌 전체 잔액 = 이번 달 쓸 수 있는 돈 + 지난달까지 남은 돈. 부모 계좌 잔액은 시드에 없어 0
-        long parentAccountId = insertAccount(parentMemberId, accounts, "parent_account", 0, 0);
-        long childAccountId = insertAccount(childMemberId, accounts, "child_account",
-                pocketNow + pocketLeftover, pocketLeftover);
+        insertAccount(parentMemberId, accounts, "parent_account", 0, 0);
+        insertAccount(childMemberId, accounts, "child_account", pocketNow + pocketLeftover, pocketLeftover);
 
         LocalTime settleTime = LocalTime.parse(str(((Map<String, Object>) seed.get("rules")).get("settle_time")));
         String openCycle = null;
@@ -91,18 +97,12 @@ public class SeedLoader implements ApplicationRunner {
         if (openCycle == null) return; // 진행 중인 정산이 없는 가족 (성년 전환 후)
 
         for (Map<String, Object> l : (List<Map<String, Object>>) seed.get("ledger")) {
-            if (!openCycle.equals(str(l.get("cycle")))) continue;
+            // 용돈·미션 보상·취소·상환 등은 해당 API를 만들 때 추가
+            if (!openCycle.equals(str(l.get("cycle"))) || !"CARD_PAYMENT".equals(str(l.get("type")))) continue;
             Timestamp at = Timestamp.valueOf(LocalDate.parse(str(l.get("date"))).atTime(LocalTime.parse(str(l.get("time")))));
-            switch (str(l.get("type"))) {
-                case "CARD_PAYMENT" -> jdbc.update(
-                        "INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
-                                + "VALUES (?, ?, ?, ?, ?, FALSE, ?)",
-                        childMemberId, settlementId, str(l.get("merchant")), str(l.get("category")), intOf(l, "amount"), at);
-                case "ALLOWANCE", "MISSION_REWARD" -> jdbc.update(
-                        "INSERT INTO transfers (from_account_id, to_account_id, type, amount, transferred_at) VALUES (?, ?, ?, ?, ?)",
-                        parentAccountId, childAccountId, str(l.get("type")), intOf(l, "amount"), at);
-                default -> { } // 취소·상환·자동 정산 등은 해당 API를 만들 때 추가
-            }
+            jdbc.update("INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
+                            + "VALUES (?, ?, ?, ?, ?, FALSE, ?)",
+                    childMemberId, settlementId, str(l.get("merchant")), str(l.get("category")), intOf(l, "amount"), at);
         }
     }
 
@@ -110,13 +110,13 @@ public class SeedLoader implements ApplicationRunner {
         return jdbc.queryForObject("SELECT member_id FROM members WHERE family_id = ? AND role = ?", Long.class, familyId, role);
     }
 
-    private long insertAccount(Long memberId, Map<String, Object> accounts, String numberKey, int balance, int carryover) {
-        return accountInsert.executeAndReturnKey(Map.of(
+    private void insertAccount(Long memberId, Map<String, Object> accounts, String numberKey, int balance, int carryover) {
+        accountInsert.execute(Map.of(
                 "member_id", memberId,
                 "bank_name", str(accounts.get("bank")),
                 "account_number", str(accounts.get(numberKey)),
                 "balance", balance,
-                "carryover_balance", carryover)).longValue();
+                "carryover_balance", carryover));
     }
 
     private static boolean isOpen(Map<String, Object> month) {

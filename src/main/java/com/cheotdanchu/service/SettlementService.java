@@ -7,34 +7,25 @@ import com.cheotdanchu.dto.CurrentSettlementResponse;
 import com.cheotdanchu.entity.Account;
 import com.cheotdanchu.entity.Member;
 import com.cheotdanchu.entity.Settlement;
-import com.cheotdanchu.entity.Transfer;
 import com.cheotdanchu.repository.AccountRepository;
 import com.cheotdanchu.repository.CardPaymentRepository;
 import com.cheotdanchu.repository.MemberRepository;
 import com.cheotdanchu.repository.SettlementRepository;
-import com.cheotdanchu.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-import java.util.EnumSet;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class SettlementService {
 
-    /** 이번 달 쓸 수 있는 돈 = 이번 달 용돈 + 미션 보상 (계좌 전체 잔액 아님) */
-    private static final Set<Transfer.Type> AVAILABLE_TYPES =
-            EnumSet.of(Transfer.Type.ALLOWANCE, Transfer.Type.MISSION_REWARD);
-
     private final MemberRepository memberRepository;
     private final SettlementRepository settlementRepository;
     private final CardPaymentRepository cardPaymentRepository;
-    private final TransferRepository transferRepository;
     private final AccountRepository accountRepository;
     private final SeedRepository seedRepository;
 
@@ -54,10 +45,8 @@ public class SettlementService {
 
         long billed = cardPaymentRepository.sumAmount(settlement.getSettlementId());
         long count = cardPaymentRepository.countBySettlementIdAndCanceledFalse(settlement.getSettlementId());
-        long available = transferRepository.sumReceived(
-                account.getAccountId(), AVAILABLE_TYPES,
-                settlement.getPeriodStart().atStartOfDay(),
-                settlement.getPeriodEnd().plusDays(1).atStartOfDay());
+        // 이번 달 쓸 수 있는 돈 = 계좌 전체 잔액 − 지난달까지 남은 돈 (용돈 + 미션 보상에서 부족분 송금 등으로 나간 돈을 뺀 값)
+        long available = account.getBalance() - account.getCarryoverBalance();
 
         // 부족 예상액은 지난달까지 남은 돈을 포함하지 않는다
         long gap = billed - available;
