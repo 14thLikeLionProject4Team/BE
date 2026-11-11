@@ -119,7 +119,7 @@ public class SettlementService {
 
     private Member child(Long personaId) {
         Member member = memberRepository.getPersona(personaId);
-        if (member.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.FORBIDDEN_ROLE);
+        if (member.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.CHILD_ONLY);
         return member;
     }
 
