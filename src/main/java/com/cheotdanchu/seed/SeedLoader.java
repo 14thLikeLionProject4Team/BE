@@ -9,6 +9,8 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -22,7 +24,8 @@ import java.util.Map;
 
 /**
  * 서버가 켜질 때 seed.json 의 원장을 DB에 넣는다. (schema.sql 이 매번 테이블을 새로 만들므로 보통 한 번만 실행됨.
- * spring.sql.init.mode=never 처럼 테이블이 남아 있는 채로 다시 켜면 계좌가 이미 있으므로 적재를 건너뛴다)
+ * spring.sql.init.mode=never 처럼 테이블이 남아 있는 채로 다시 켜면 계좌가 이미 있으므로 적재를 건너뛴다.
+ * 적재는 한 트랜잭션이라 도중에 실패하면 전부 되돌려진다)
  *
  * 지금은 현재 정산 조회(GET /settlements/current)에 필요한 것만 넣는다.
  *  - accounts: 부모·자녀 계좌 (자녀 balance = 이번 달 쓸 수 있는 돈 + 지난달까지 남은 돈)
@@ -37,14 +40,16 @@ import java.util.Map;
 public class SeedLoader implements ApplicationRunner {
 
     private final JdbcTemplate jdbc;
+    private final TransactionTemplate tx;
     private final List<String> files;
     private final SimpleJdbcInsert accountInsert;
     private final SimpleJdbcInsert settlementInsert;
 
     public SeedLoader(JdbcTemplate jdbc,
+                      PlatformTransactionManager txManager,
                       @Value("${ai.seed.files:seed/family_a/seed.json,seed/family_b/seed.json}") String files) {
         this.jdbc = jdbc;
-        this.files = Arrays.stream(files.split(",")).map(String::trim).filter(p -> !p.isEmpty()).toList();
+        this.tx = new TransactionTemplate(txManager);        this.files = Arrays.stream(files.split(",")).map(String::trim).filter(p -> !p.isEmpty()).toList();
         // usingColumns 로 쓸 컬럼을 정해 두지 않으면 나머지 컬럼에 NULL이 들어가 NOT NULL DEFAULT 컬럼이 깨진다.
         // 정산은 카드 결제를 연결해야 해서 생성된 ID를 바로 돌려받는다 (넣은 뒤 다시 조회하지 않기 위해)
         this.accountInsert = new SimpleJdbcInsert(jdbc).withTableName("accounts")
@@ -57,12 +62,16 @@ public class SeedLoader implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        Integer accountCount = jdbc.queryForObject("SELECT COUNT(*) FROM accounts", Integer.class);
-        if (accountCount != null && accountCount > 0) {
-            log.info("계좌가 이미 있어서 시드 적재를 건너뜁니다.");
-            return;
-        }
-        for (String path : files) load(JsonUtil.parseObject(read(path)), path);
+        // 전체를 한 트랜잭션으로 묶는다. 중간에 실패하면 이미 넣은 계좌도 되돌려져서,
+        // "계좌는 있는데 나머지는 비어 있는" 반쯤 적재된 상태가 남지 않는다 (아래 건너뛰기 판단이 맞으려면 필요)
+        tx.executeWithoutResult(status -> {
+            Integer accountCount = jdbc.queryForObject("SELECT COUNT(*) FROM accounts", Integer.class);
+            if (accountCount != null && accountCount > 0) {
+                log.info("계좌가 이미 있어서 시드 적재를 건너뜁니다.");
+                return;
+            }
+            for (String path : files) load(JsonUtil.parseObject(read(path)), path);
+        });
     }
 
     @SuppressWarnings("unchecked")

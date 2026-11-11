@@ -1,0 +1,20 @@
+{
+  "family": "A",
+  "accounts": { "bank": "테스트은행", "child_account": "0000-00-0001", "parent_account": "0000-00-0002" },
+  "rules": { "settle_time": "18:00" },
+  "reference": {
+    "today": { "pocket_now": 73000, "pocket_leftover": 59900 },
+    "monthly": [
+      {
+        "cycle": "2026-09",
+        "period": "2026-08-26 ~ 2026-09-25",
+        "status": "완납",
+        "resolution": "완납",
+        "bill": "숫자가 아님",
+        "balance_before_settle": 70000,
+        "settled": 61500
+      }
+    ]
+  },
+  "ledger": []
+}
