@@ -1,6 +1,7 @@
 package com.cheotdanchu.service;
 
 import com.cheotdanchu.dto.ShortfallCheckResponse;
+import com.cheotdanchu.entity.Settlement;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -17,7 +18,23 @@ class ShortfallCheckTest {
     private static final LocalDate DUE = LocalDate.of(2026, 10, 25);
 
     private ShortfallCheckResponse check(long dDay, long billed, long available, long carryover) {
-        return SettlementService.check(DUE, dDay, billed, available, carryover);
+        return SettlementService.check(DUE, Settlement.Status.SCHEDULED, dDay, billed, available, carryover);
+    }
+
+    private ShortfallCheckResponse check(Settlement.Status status) {
+        return SettlementService.check(DUE, status, 3, 79500, 73000, 59900);
+    }
+
+    @Test
+    void 결제일_도래_상태에서도_보여준다() {
+        assertTrue(check(Settlement.Status.REQUIRED).visible());
+    }
+
+    @Test
+    void 정산이_시작된_뒤의_상태에서는_부족해도_보여주지_않는다() {
+        assertFalse(check(Settlement.Status.SHORTFALL).visible());
+        assertFalse(check(Settlement.Status.PARTIAL).visible());
+        assertFalse(check(Settlement.Status.COMPLETED).visible());
     }
 
     @Test
