@@ -16,8 +16,7 @@ public enum ErrorStatus {
     PARENT_ONLY(403, "부모만 할 수 있어요"),
     INVALID_INPUT(400, "입력값을 확인해 주세요"),
     INVALID_PERIOD(400, "끝나는 날은 시작일 이후여야 해요"),
-    ACCOUNT_NOT_FOUND(404, "연결된 계좌를 찾을 수 없습니다"),
-    SETTLEMENT_NOT_FOUND(404, "현재 정산 기간이 없어요");
+    ACCOUNT_NOT_FOUND(404, "연결된 계좌를 찾을 수 없습니다");
 
     private final int code;
     private final String message;
