@@ -129,8 +129,7 @@ public class SettlementService {
     }
 
     private Optional<Settlement> findCurrent(Member member, LocalDate today) {
-        return settlementRepository.findByFamilyIdAndPeriodStartLessThanEqualAndPeriodEndGreaterThanEqual(
-                member.getFamily().getFamilyId(), today, today);
+        return settlementRepository.findCurrent(member.getFamily().getFamilyId(), today);
     }
 
     private Snapshot snapshot(Settlement settlement, Account account, LocalDate today) {
