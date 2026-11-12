@@ -22,6 +22,8 @@ public class Transfer {
     @Enumerated(EnumType.STRING)
     private Type type;
 
+    private int amount;
+
     private LocalDateTime transferredAt;
 
     public enum Type { ALLOWANCE, SETTLEMENT, SHORTFALL_PAYMENT, AUTO_DEDUCT, MISSION_REWARD, PARENT_SUPPORT }

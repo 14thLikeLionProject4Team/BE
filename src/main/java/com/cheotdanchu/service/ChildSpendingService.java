@@ -75,9 +75,8 @@ public class ChildSpendingService {
 
         // 이번 달 용돈 = 이번 달 용돈 보내는 날에 적용 중인 금액 (11월부터 바뀌는 용돈은 10월에는 해당 없음)
         YearMonth month = YearMonth.from(today);
-        LocalDate allowanceDate = month.atDay(setting.getAllowanceDay());
         AllowanceChange change = allowanceChangeRepository
-                .findFirstByFamilyIdAndEffectiveFromLessThanEqualOrderByEffectiveFromDesc(familyId, allowanceDate)
+                .findForMonth(familyId, month, setting.getAllowanceDay())
                 .orElse(null);
         if (change == null) return null;
 

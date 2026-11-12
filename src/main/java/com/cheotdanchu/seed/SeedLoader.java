@@ -32,8 +32,8 @@ import java.util.Map;
  *  - settlements: 월별 정산 이력 (진행 중인 달은 청구액을 비워 두고 카드 결제에서 계산)
  *  - family_settings: 용돈 보내는 날·결제일·미션 상한 비율·카드 한도
  *  - allowance_changes: 용돈 변경 이력 (아직 적용 전인 변경도 포함)
- *  - card_payments, transfers(용돈 입금): 진행 중인 정산 기간 것만
- * 과거 결제·취소·상환·미션 보상 이체 등은 해당 API를 만들 때 추가한다.
+ *  - card_payments, transfers(용돈·미션 보상 입금): 진행 중인 정산 기간 것만
+ * 과거 결제·취소·상환 등은 해당 API를 만들 때 추가한다.
  *
  * families / members 는 data.sql 이 넣는다. 가족은 이름("가족 A")으로 찾는다.
  */
@@ -108,23 +108,24 @@ public class SeedLoader implements ApplicationRunner {
                 LocalDate.parse(str(today.get("date"))));
         if (settlementId == null) return; // 진행 중인 정산이 없는 가족 (성년 전환 후)
 
-        // 미션 보상·취소·상환 등은 해당 API를 만들 때 추가
+        // 취소·상환 등은 해당 API를 만들 때 추가
         List<Object[]> payments = new ArrayList<>();
-        List<Object[]> allowances = new ArrayList<>();
+        List<Object[]> transfers = new ArrayList<>();
         for (Map<String, Object> l : (List<Map<String, Object>>) seed.get("ledger")) {
             if (!openCycle.equals(str(l.get("cycle")))) continue;
             Timestamp at = Timestamp.valueOf(LocalDate.parse(str(l.get("date"))).atTime(LocalTime.parse(str(l.get("time")))));
             switch (str(l.get("type"))) {
                 case "CARD_PAYMENT" -> payments.add(new Object[]{
                         childMemberId, settlementId, str(l.get("merchant")), str(l.get("category")), intOf(l, "amount"), at});
-                case "ALLOWANCE" -> allowances.add(new Object[]{parentAccountId, childAccountId, "ALLOWANCE", intOf(l, "amount"), at});
+                case "ALLOWANCE", "MISSION_REWARD" -> transfers.add(new Object[]{
+                        parentAccountId, childAccountId, str(l.get("type")), intOf(l, "amount"), at});
                 default -> { }
             }
         }
         jdbc.batchUpdate("INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
                 + "VALUES (?, ?, ?, ?, ?, FALSE, ?)", payments);
         jdbc.batchUpdate("INSERT INTO transfers (from_account_id, to_account_id, type, amount, transferred_at) "
-                + "VALUES (?, ?, ?, ?, ?)", allowances);
+                + "VALUES (?, ?, ?, ?, ?)", transfers);
     }
 
     /** 자동이체 여부·공개 범위는 컬럼 기본값(켜짐·총액만)을 쓴다. 미션 상한 비율은 시드의 0.3 을 30(%)으로 바꿔 넣는다 */

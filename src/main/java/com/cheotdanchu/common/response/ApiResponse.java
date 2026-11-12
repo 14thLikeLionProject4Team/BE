@@ -7,6 +7,10 @@ public record ApiResponse<T>(boolean success, int code, String message, T data) 
     }
 
     public static <T> ApiResponse<T> onFailure(ErrorStatus status) {
-        return new ApiResponse<>(false, status.getCode(), status.getMessage(), null);
+        return onFailure(status, status.getMessage());
+    }
+
+    public static <T> ApiResponse<T> onFailure(ErrorStatus status, String message) {
+        return new ApiResponse<>(false, status.getCode(), message, null);
     }
 }

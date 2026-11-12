@@ -17,6 +17,7 @@ public enum ErrorStatus {
     ADULT_TRANSITIONED(403, "기록이 본인에게 넘어갔어요."),
     INVALID_INPUT(400, "입력값을 확인해 주세요"),
     INVALID_PERIOD(400, "끝나는 날은 시작일 이후여야 해요"),
+    REWARD_CAP_EXCEEDED(422, "이번 달 남은 한도를 넘어요"),
     ACCOUNT_NOT_FOUND(404, "연결된 계좌를 찾을 수 없습니다");
 
     private final int code;
