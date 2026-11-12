@@ -13,7 +13,8 @@ public enum SuccessStatus {
     MISSION_CREATED(201, "미션을 열었어요. 아이에게 바로 알림이 가요."),
     SETTLEMENT_CURRENT_OK(200, "조회 성공"),
     SHORTFALL_CHECK_OK(200, "부족 예상 조회 성공"),
-    CHILD_SPENDING_OK(200, "정산 요약 조회 성공");
+    CHILD_SPENDING_OK(200, "정산 요약 조회 성공"),
+    RECORDS_SUMMARY_OK(200, "조회 성공");
 
     private final int code;
     private final String message;
