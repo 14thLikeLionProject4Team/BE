@@ -16,7 +16,7 @@ public class GlobalExceptionAdvice {
 
     @ExceptionHandler(GeneralException.class)
     public ResponseEntity<ApiResponse<Void>> handle(GeneralException e) {
-        return fail(e.getStatus());
+        return fail(e.getStatus(), e.getMessage());
     }
 
     @ExceptionHandler(MissingRequestHeaderException.class)
@@ -37,6 +37,10 @@ public class GlobalExceptionAdvice {
     }
 
     private ResponseEntity<ApiResponse<Void>> fail(ErrorStatus status) {
-        return ResponseEntity.status(status.getCode()).body(ApiResponse.onFailure(status));
+        return fail(status, status.getMessage());
+    }
+
+    private ResponseEntity<ApiResponse<Void>> fail(ErrorStatus status, String message) {
+        return ResponseEntity.status(status.getCode()).body(ApiResponse.onFailure(status, message));
     }
 }

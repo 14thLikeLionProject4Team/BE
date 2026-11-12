@@ -7,26 +7,38 @@ import com.cheotdanchu.dto.MissionCreateRequest;
 import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionListResponse;
+import com.cheotdanchu.entity.AllowanceChange;
+import com.cheotdanchu.entity.FamilySetting;
 import com.cheotdanchu.entity.Member;
 import com.cheotdanchu.entity.Mission;
 import com.cheotdanchu.entity.MissionSubmission;
 import com.cheotdanchu.entity.Notification;
+import com.cheotdanchu.entity.Settlement;
 import com.cheotdanchu.entity.SubmissionPhoto;
+import com.cheotdanchu.entity.Transfer;
+import com.cheotdanchu.repository.AccountRepository;
+import com.cheotdanchu.repository.AllowanceChangeRepository;
+import com.cheotdanchu.repository.FamilySettingRepository;
 import com.cheotdanchu.repository.MemberRepository;
 import com.cheotdanchu.repository.MissionRepository;
 import com.cheotdanchu.repository.MissionSubmissionRepository;
 import com.cheotdanchu.repository.NotificationRepository;
+import com.cheotdanchu.repository.SettlementRepository;
 import com.cheotdanchu.repository.SubmissionPhotoRepository;
+import com.cheotdanchu.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -42,6 +54,11 @@ public class MissionService {
     private final MissionSubmissionRepository submissionRepository;
     private final SubmissionPhotoRepository photoRepository;
     private final NotificationRepository notificationRepository;
+    private final FamilySettingRepository familySettingRepository;
+    private final AllowanceChangeRepository allowanceChangeRepository;
+    private final AccountRepository accountRepository;
+    private final TransferRepository transferRepository;
+    private final SettlementRepository settlementRepository;
     private final SeedRepository seedRepository;
 
     public MissionListResponse getMissions(Long personaId, String status) {
@@ -71,14 +88,48 @@ public class MissionService {
         if (parent.getRole() != Member.Role.PARENT) throw new GeneralException(ErrorStatus.PARENT_ONLY);
         if (req.endDate().isBefore(req.startDate())) throw new GeneralException(ErrorStatus.INVALID_PERIOD);
 
+        Long familyId = parent.getFamily().getFamilyId();
+        Optional<Member> child = memberRepository.findByFamily_FamilyIdAndRole(familyId, Member.Role.CHILD);
+        long remaining = remainingRewardCap(familyId, child);
+        if (req.rewardAmount() > remaining) {
+            throw new GeneralException(ErrorStatus.REWARD_CAP_EXCEEDED,
+                    String.format(Locale.KOREA, "이번 달 남은 한도(%,d원)를 넘어요.", remaining));
+        }
+
         Mission mission = missionRepository.save(Mission.createByParent(parent.getFamily(), req));
 
-        memberRepository.findByFamily_FamilyIdAndRole(parent.getFamily().getFamilyId(), Member.Role.CHILD)
-                .ifPresent(child -> notificationRepository.save(Notification.of(
-                        child, Notification.Type.NEW_MISSION, "새 미션이 열렸어요", mission.getTitle(),
-                        mission.getMissionId(), LocalDateTime.now())));
+        child.ifPresent(c -> notificationRepository.save(Notification.of(
+                c, Notification.Type.NEW_MISSION, "새 미션이 열렸어요", mission.getTitle(),
+                mission.getMissionId(), LocalDateTime.now())));
 
         return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
+    /**
+     * 미션 보상 남은 한도 = 이번 정산 기간 용돈 × 미션 상한 비율 − 현재 정산 기간에 받은 미션 보상.
+     * 명세대로 지급된 보상만 뺀다 (진행 중인 미션은 빼지 않음). 실제 초과 지급은 승인(지급) 시점에 막는다.
+     * 용돈 설정이 없으면 한도 없음, 진행 중인 정산이 없으면 받은 보상 0.
+     */
+    private long remainingRewardCap(Long familyId, Optional<Member> child) {
+        FamilySetting setting = familySettingRepository.findById(familyId).orElse(null);
+        if (setting == null) return Long.MAX_VALUE;
+
+        LocalDate today = seedRepository.today();
+        Optional<Settlement> current = settlementRepository.findCurrent(familyId, today);
+        // 용돈은 정산 기간 끝나는 달에 들어온다 (9/26~10/25 기간 → 10월 용돈). 10/26~10/31이면 11월 용돈 기준
+        YearMonth month = YearMonth.from(current.map(Settlement::getPeriodEnd).orElse(today));
+        Integer allowance = allowanceChangeRepository.findForMonth(familyId, month, setting.getAllowanceDay())
+                .map(AllowanceChange::getAmount)
+                .orElse(null);
+        if (allowance == null) return Long.MAX_VALUE;
+
+        long cap = (long) allowance * setting.getMissionCapRate() / 100;
+        long received = current.isEmpty() ? 0L : child.flatMap(c -> accountRepository.findByMemberId(c.getMemberId()))
+                .map(account -> transferRepository.sumReceived(account.getAccountId(), Transfer.Type.MISSION_REWARD,
+                        current.get().getPeriodStart().atStartOfDay(),
+                        current.get().getPeriodEnd().plusDays(1).atStartOfDay()))
+                .orElse(0L);
+        return Math.max(cap - received, 0);
     }
 
     public MissionDetailResponse getMission(Long personaId, Long missionId) {
