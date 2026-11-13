@@ -1,12 +1,14 @@
 package com.cheotdanchu.service;
 
 import com.cheotdanchu.ai.SeedRepository;
+import com.cheotdanchu.common.config.PhotoStorage;
 import com.cheotdanchu.common.exception.GeneralException;
 import com.cheotdanchu.common.response.ErrorStatus;
 import com.cheotdanchu.dto.MissionCreateRequest;
 import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionListResponse;
+import com.cheotdanchu.dto.MissionSubmitResponse;
 import com.cheotdanchu.entity.AllowanceChange;
 import com.cheotdanchu.entity.FamilySetting;
 import com.cheotdanchu.entity.Member;
@@ -29,6 +31,7 @@ import com.cheotdanchu.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -60,6 +63,7 @@ public class MissionService {
     private final TransferRepository transferRepository;
     private final SettlementRepository settlementRepository;
     private final SeedRepository seedRepository;
+    private final PhotoStorage photoStorage;
 
     public MissionListResponse getMissions(Long personaId, String status) {
         if (!"active".equals(status)) throw new GeneralException(ErrorStatus.INVALID_MISSION_STATUS);
@@ -132,12 +136,29 @@ public class MissionService {
         return Math.max(cap - received, 0);
     }
 
+    @Transactional
+    public MissionSubmitResponse submitMission(Long personaId, Long missionId, List<MultipartFile> photos) {
+        Member child = memberRepository.getPersona(personaId);
+        if (child.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.CHILD_ONLY);
+        Mission mission = familyMission(child, missionId);
+        if (!mission.canSubmit(seedRepository.today())) throw new GeneralException(ErrorStatus.MISSION_NOT_SUBMITTABLE);
+
+        List<MultipartFile> files = photos == null ? List.of() : photos.stream().filter(f -> !f.isEmpty()).toList();
+        if (mission.getVerifyMethod() == Mission.VerifyMethod.PHOTO && files.isEmpty()) {
+            throw new GeneralException(ErrorStatus.PHOTO_REQUIRED);
+        }
+        files.forEach(photoStorage::validate);
+
+        MissionSubmission submission = submissionRepository.save(MissionSubmission.of(mission, LocalDateTime.now()));
+        files.forEach(f -> photoRepository.save(SubmissionPhoto.of(submission, photoStorage.save(f))));
+        mission.submit();
+
+        return new MissionSubmitResponse(submission.getSubmissionId(), mission.getStatus());
+    }
+
     public MissionDetailResponse getMission(Long personaId, Long missionId) {
         Member member = memberRepository.getPersona(personaId);
-        Mission m = missionRepository.findById(missionId)
-                // 다른 가족의 미션도 404: 존재 여부를 알려주지 않기 위해
-                .filter(found -> found.getFamily().getFamilyId().equals(member.getFamily().getFamilyId()))
-                .orElseThrow(() -> new GeneralException(ErrorStatus.MISSION_NOT_FOUND));
+        Mission m = familyMission(member, missionId);
 
         List<MissionSubmission> submissions = submissionRepository.findByMission_MissionIdOrderBySubmittedAtDesc(missionId);
         Map<Long, List<String>> photos = photoRepository
@@ -160,6 +181,13 @@ public class MissionService {
                                 s.getSubmissionId(), s.getReviewStatus(),
                                 photos.getOrDefault(s.getSubmissionId(), List.of()), s.getSubmittedAt()))
                         .toList());
+    }
+
+    /** 내 가족의 미션. 다른 가족의 미션도 404: 존재 여부를 알려주지 않기 위해 */
+    private Mission familyMission(Member member, Long missionId) {
+        return missionRepository.findById(missionId)
+                .filter(found -> found.getFamily().getFamilyId().equals(member.getFamily().getFamilyId()))
+                .orElseThrow(() -> new GeneralException(ErrorStatus.MISSION_NOT_FOUND));
     }
 
     private MissionListResponse.MissionDto toDto(Mission m, LocalDate today) {

@@ -10,6 +10,7 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 public class GlobalExceptionAdvice {
@@ -34,6 +35,11 @@ public class GlobalExceptionAdvice {
     @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class})
     public ResponseEntity<ApiResponse<Void>> handleInvalidInput(Exception e) {
         return fail(ErrorStatus.INVALID_INPUT);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handle(MaxUploadSizeExceededException e) {
+        return fail(ErrorStatus.PHOTO_TOO_LARGE);
     }
 
     private ResponseEntity<ApiResponse<Void>> fail(ErrorStatus status) {

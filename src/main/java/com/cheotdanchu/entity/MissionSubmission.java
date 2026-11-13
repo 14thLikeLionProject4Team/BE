@@ -28,5 +28,13 @@ public class MissionSubmission {
     @Column(nullable = false)
     private LocalDateTime submittedAt;
 
+    public static MissionSubmission of(Mission mission, LocalDateTime submittedAt) {
+        MissionSubmission s = new MissionSubmission();
+        s.mission = mission;
+        s.reviewStatus = ReviewStatus.PENDING;
+        s.submittedAt = submittedAt;
+        return s;
+    }
+
     public enum ReviewStatus { PENDING, APPROVED, REJECTED }
 }

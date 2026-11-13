@@ -6,13 +6,15 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** 서버가 켜질 때 schema.sql·data.sql·SeedLoader 가 실행된 개발 DB를 그대로 쓴다 (MySQL 필요) */
+/** 서버가 켜질 때 schema.sql·data.sql·SeedLoader 가 실행된 개발 DB를 그대로 쓴다 (MySQL 필요). 테스트마다 롤백돼서 넣은 데이터가 남지 않는다 */
 @SpringBootTest
+@Transactional
 @AutoConfigureMockMvc
 class RecordsSummaryApiTest {
 
@@ -55,16 +57,13 @@ class RecordsSummaryApiTest {
                 + "paid_amount, status, result, is_excluded) VALUES (1, ?, ?, ?, ?, ?, ?, 'COMPLETED', ?, ?)";
         jdbc.update(insert, "2030-01-26", "2030-02-25", "2030-02-25 18:00:00", 50000, 70000, 50000, "FULL_PAID", true);
         jdbc.update(insert, "2030-02-26", "2030-03-25", "2030-03-25 18:00:00", null, null, 0, null, false);
-        try {
-            mockMvc.perform(get("/records/summary").header("X-Persona-Id", 2))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.fullPaidMonths").value(10))
-                    .andExpect(jsonPath("$.data.totalMonths").value(11))
-                    .andExpect(jsonPath("$.data.maxStreak").value(6))
-                    .andExpect(jsonPath("$.data.shortfallCount").value(1));
-        } finally {
-            jdbc.update("DELETE FROM settlements WHERE period_end >= '2030-01-01'"); // 다른 테스트에 남지 않게
-        }
+
+        mockMvc.perform(get("/records/summary").header("X-Persona-Id", 2))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.fullPaidMonths").value(10))
+                .andExpect(jsonPath("$.data.totalMonths").value(11))
+                .andExpect(jsonPath("$.data.maxStreak").value(6))
+                .andExpect(jsonPath("$.data.shortfallCount").value(1));
     }
 
     @Test

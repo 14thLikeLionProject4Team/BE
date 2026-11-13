@@ -70,6 +70,19 @@ public class Mission {
         return m;
     }
 
+    /**
+     * 새 미션·진행 중인 미션이고 마감일이 지나지 않았을 때만 완료를 제출할 수 있다. 제출하면 부모 확인 대기(SUBMITTED).
+     * 시작일은 검사하지 않는다: 데모 기준일이 고정이라, 시연 중 실제 날짜로 시작일을 넣은 새 미션이 영영 제출되지 않는 일을 막기 위해.
+     */
+    public boolean canSubmit(LocalDate today) {
+        boolean open = status == Status.NEW || status == Status.IN_PROGRESS;
+        return open && (endDate == null || !today.isAfter(endDate));
+    }
+
+    public void submit() {
+        status = Status.SUBMITTED;
+    }
+
     /** 목표 횟수: 반복 주기와 기간으로 계산 (기간이 없으면 1회) */
     public int targetCount() {
         if (startDate == null || endDate == null) return 1;
