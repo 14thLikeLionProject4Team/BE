@@ -23,4 +23,9 @@ public class Account {
 
     /** 그중 지난달까지 남은 돈 */
     private int carryoverBalance;
+
+    /** 이번 달 쓸 수 있는 돈으로 들어오는 입금 (용돈·미션 보상). 지난달까지 남은 돈은 그대로 */
+    public void deposit(int amount) {
+        balance += amount;
+    }
 }

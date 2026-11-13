@@ -25,8 +25,13 @@ public class MissionSubmission {
     @Column(nullable = false)
     private ReviewStatus reviewStatus;
 
+    @Enumerated(EnumType.STRING)
+    private RejectReason rejectReason;
+
     @Column(nullable = false)
     private LocalDateTime submittedAt;
+
+    private LocalDateTime reviewedAt;
 
     public static MissionSubmission of(Mission mission, LocalDateTime submittedAt) {
         MissionSubmission s = new MissionSubmission();
@@ -36,5 +41,31 @@ public class MissionSubmission {
         return s;
     }
 
+    public boolean isPending() {
+        return reviewStatus == ReviewStatus.PENDING;
+    }
+
+    public void approve(LocalDateTime at) {
+        reviewStatus = ReviewStatus.APPROVED;
+        reviewedAt = at;
+    }
+
+    public void reject(RejectReason reason, LocalDateTime at) {
+        reviewStatus = ReviewStatus.REJECTED;
+        rejectReason = reason;
+        reviewedAt = at;
+    }
+
     public enum ReviewStatus { PENDING, APPROVED, REJECTED }
+
+    public enum RejectReason {
+        PHOTO_UNCLEAR("사진이 잘 안 보여요"),
+        NOT_DONE("아직 다 안 한 것 같아요");
+
+        public final String label;
+
+        RejectReason(String label) {
+            this.label = label;
+        }
+    }
 }

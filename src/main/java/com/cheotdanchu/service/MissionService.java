@@ -9,6 +9,8 @@ import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionListResponse;
 import com.cheotdanchu.dto.MissionSubmitResponse;
+import com.cheotdanchu.dto.SubmissionReviewDtos;
+import com.cheotdanchu.entity.Account;
 import com.cheotdanchu.entity.AllowanceChange;
 import com.cheotdanchu.entity.FamilySetting;
 import com.cheotdanchu.entity.Member;
@@ -35,6 +37,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.EnumSet;
 import java.util.List;
@@ -96,15 +99,14 @@ public class MissionService {
         Optional<Member> child = memberRepository.findByFamily_FamilyIdAndRole(familyId, Member.Role.CHILD);
         long remaining = remainingRewardCap(familyId, child);
         if (req.rewardAmount() > remaining) {
-            throw new GeneralException(ErrorStatus.REWARD_CAP_EXCEEDED,
-                    String.format(Locale.KOREA, "이번 달 남은 한도(%,d원)를 넘어요.", remaining));
+            throw capExceeded(remaining);
         }
 
         Mission mission = missionRepository.save(Mission.createByParent(parent.getFamily(), req));
 
         child.ifPresent(c -> notificationRepository.save(Notification.of(
                 c, Notification.Type.NEW_MISSION, "새 미션이 열렸어요", mission.getTitle(),
-                mission.getMissionId(), LocalDateTime.now())));
+                mission.getMissionId(), demoNow())));
 
         return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
     }
@@ -149,11 +151,93 @@ public class MissionService {
         }
         files.forEach(photoStorage::validate);
 
-        MissionSubmission submission = submissionRepository.save(MissionSubmission.of(mission, LocalDateTime.now()));
+        MissionSubmission submission = submissionRepository.save(MissionSubmission.of(mission, demoNow()));
         files.forEach(f -> photoRepository.save(SubmissionPhoto.of(submission, photoStorage.save(f))));
         mission.submit();
 
         return new MissionSubmitResponse(submission.getSubmissionId(), mission.getStatus());
+    }
+
+    /**
+     * 승인: 보상을 부모 → 자녀 계좌로 보내고(이체 기록 + 자녀 잔액 증가) 알림을 보낸다. 한 트랜잭션이라 중간에 실패하면 전부 되돌린다.
+     * 실제로 돈이 나가는 곳이라 한도를 지급할 때마다 다시 검사한다 (반복 미션·여러 달에 걸친 미션도 회차마다 걸림).
+     */
+    @Transactional
+    public SubmissionReviewDtos.ApproveResponse approve(Long personaId, Long submissionId) {
+        Member parent = parent(personaId);
+        MissionSubmission submission = familySubmission(parent, submissionId);
+        if (!submission.isPending()) throw new GeneralException(ErrorStatus.ALREADY_REVIEWED);
+
+        Mission mission = submission.getMission();
+        int reward = mission.getRewardAmount() == null ? 0 : mission.getRewardAmount();
+        Long familyId = parent.getFamily().getFamilyId();
+        Optional<Member> child = memberRepository.findByFamily_FamilyIdAndRole(familyId, Member.Role.CHILD);
+        long remaining = remainingRewardCap(familyId, child);
+        if (reward > remaining) throw capExceeded(remaining);
+
+        Account childAccount = child.flatMap(c -> accountRepository.findByMemberId(c.getMemberId()))
+                .orElseThrow(() -> new GeneralException(ErrorStatus.ACCOUNT_NOT_FOUND));
+        Long parentAccountId = accountRepository.findByMemberId(parent.getMemberId()).map(Account::getAccountId).orElse(null);
+
+        LocalDateTime now = demoNow();
+        int approvedCount = (int) submissionRepository.countByMission_MissionIdAndReviewStatus(
+                mission.getMissionId(), MissionSubmission.ReviewStatus.APPROVED) + 1;
+        submission.approve(now);
+        mission.afterApproval(approvedCount);
+        // 부모 계좌 잔액은 시드에 없어서(0원) 빼지 않는다. 자녀 쪽 이번 달 쓸 수 있는 돈만 늘린다
+        childAccount.deposit(reward);
+        Transfer transfer = transferRepository.save(
+                Transfer.missionReward(parentAccountId, childAccount.getAccountId(), reward, mission.getMissionId(), now));
+        notificationRepository.save(Notification.of(child.get(), Notification.Type.MISSION_REWARD, "보상이 들어왔어요",
+                String.format(Locale.KOREA, "%s · %,d원", mission.getTitle(), reward), mission.getMissionId(), now));
+
+        return new SubmissionReviewDtos.ApproveResponse(submission.getSubmissionId(), submission.getReviewStatus(),
+                mission.getStatus(), transfer.getTransferId(), reward);
+    }
+
+    /** 반려: 보상은 보내지 않고 미션을 다시 진행 중으로 돌린 뒤, 사유와 함께 자녀에게 알린다 */
+    @Transactional
+    public SubmissionReviewDtos.RejectResponse reject(Long personaId, Long submissionId, MissionSubmission.RejectReason reason) {
+        Member parent = parent(personaId);
+        MissionSubmission submission = familySubmission(parent, submissionId);
+        if (!submission.isPending()) throw new GeneralException(ErrorStatus.ALREADY_REVIEWED);
+
+        Mission mission = submission.getMission();
+        LocalDateTime now = demoNow();
+        submission.reject(reason, now);
+        mission.afterRejection();
+        memberRepository.findByFamily_FamilyIdAndRole(parent.getFamily().getFamilyId(), Member.Role.CHILD)
+                .ifPresent(c -> notificationRepository.save(Notification.of(c, Notification.Type.MISSION_REJECTED,
+                        "미션을 다시 확인해 주세요", mission.getTitle() + " · " + reason.label, mission.getMissionId(), now)));
+
+        return new SubmissionReviewDtos.RejectResponse(submission.getSubmissionId(), submission.getReviewStatus(),
+                submission.getRejectReason(), mission.getStatus());
+    }
+
+    private Member parent(Long personaId) {
+        Member member = memberRepository.getPersona(personaId);
+        if (member.getRole() != Member.Role.PARENT) throw new GeneralException(ErrorStatus.PARENT_ONLY);
+        return member;
+    }
+
+    /** 내 가족 미션의 제출. 다른 가족 것이면 404 */
+    private MissionSubmission familySubmission(Member member, Long submissionId) {
+        return submissionRepository.findById(submissionId)
+                .filter(s -> s.getMission().getFamily().getFamilyId().equals(member.getFamily().getFamilyId()))
+                .orElseThrow(() -> new GeneralException(ErrorStatus.SUBMISSION_NOT_FOUND));
+    }
+
+    private static GeneralException capExceeded(long remaining) {
+        return new GeneralException(ErrorStatus.REWARD_CAP_EXCEEDED,
+                String.format(Locale.KOREA, "이번 달 남은 한도(%,d원)를 넘어요.", remaining));
+    }
+
+    /**
+     * 데모 기준일 + 지금 시각. 이체·제출·알림 시각은 실제 날짜가 아니라 데모 기준일로 남긴다
+     * (실제 날짜로 남기면 현재 정산 기간 밖이 돼서 받은 보상·한도 계산에서 빠진다).
+     */
+    private LocalDateTime demoNow() {
+        return seedRepository.today().atTime(LocalTime.now().withNano(0));
     }
 
     public MissionDetailResponse getMission(Long personaId, Long missionId) {

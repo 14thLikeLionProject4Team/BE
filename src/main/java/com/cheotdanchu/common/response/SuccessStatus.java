@@ -12,6 +12,8 @@ public enum SuccessStatus {
     MISSION_DETAIL_OK(200, "미션 상세 조회 성공"),
     MISSION_CREATED(201, "미션을 열었어요. 아이에게 바로 알림이 가요."),
     MISSION_SUBMITTED(201, "완료를 제출했어요. 부모님 확인을 기다려요."),
+    SUBMISSION_APPROVED(200, "보상을 보냈어요."),
+    SUBMISSION_REJECTED(200, "아이에게 다시 부탁했어요."),
     SETTLEMENT_CURRENT_OK(200, "조회 성공"),
     SHORTFALL_CHECK_OK(200, "부족 예상 조회 성공"),
     CHILD_SPENDING_OK(200, "정산 요약 조회 성공"),
