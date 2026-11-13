@@ -21,4 +21,11 @@ public class SubmissionPhoto {
 
     @Column(nullable = false, length = 500)
     private String imageUrl;
+
+    public static SubmissionPhoto of(MissionSubmission submission, String imageUrl) {
+        SubmissionPhoto p = new SubmissionPhoto();
+        p.submission = submission;
+        p.imageUrl = imageUrl;
+        return p;
+    }
 }

@@ -18,6 +18,10 @@ public enum ErrorStatus {
     INVALID_INPUT(400, "입력값을 확인해 주세요"),
     INVALID_PERIOD(400, "끝나는 날은 시작일 이후여야 해요"),
     REWARD_CAP_EXCEEDED(422, "이번 달 남은 한도를 넘어요"),
+    PHOTO_REQUIRED(400, "인증 사진을 올려 주세요."),
+    INVALID_PHOTO(400, "사진 파일(jpg, png, heic, heif, webp)만 올릴 수 있어요."),
+    PHOTO_TOO_LARGE(400, "사진이 너무 커요. 10MB 이하로 올려 주세요."),
+    MISSION_NOT_SUBMITTABLE(409, "지금은 제출할 수 없는 미션이에요."),
     ACCOUNT_NOT_FOUND(404, "연결된 계좌를 찾을 수 없습니다");
 
     private final int code;

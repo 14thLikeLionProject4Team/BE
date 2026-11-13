@@ -37,3 +37,6 @@ out/
 .vscode/
 
 src/main/resources/application.yaml
+
+### 인증 사진 (로컬 저장) ###
+uploads/
