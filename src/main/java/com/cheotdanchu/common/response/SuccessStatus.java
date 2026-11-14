@@ -17,7 +17,10 @@ public enum SuccessStatus {
     SETTLEMENT_CURRENT_OK(200, "조회 성공"),
     SHORTFALL_CHECK_OK(200, "부족 예상 조회 성공"),
     CHILD_SPENDING_OK(200, "정산 요약 조회 성공"),
-    RECORDS_SUMMARY_OK(200, "조회 성공");
+    RECORDS_SUMMARY_OK(200, "조회 성공"),
+    ALLOWANCE_SUGGESTION_OK(200, "AI 용돈 제안 조회 성공"),
+    ALLOWANCE_SUGGESTION_APPLIED(200, "용돈 변경을 적용했어요."),
+    ALLOWANCE_SUGGESTION_KEPT(200, "지금 용돈을 유지해요.");
 
     private final int code;
     private final String message;
