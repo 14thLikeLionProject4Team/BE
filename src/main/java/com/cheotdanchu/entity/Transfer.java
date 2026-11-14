@@ -15,7 +15,10 @@ import java.time.LocalDateTime;
 public class Transfer {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long transferId;
+
+    private Long fromAccountId;
 
     private Long toAccountId;
 
@@ -24,7 +27,20 @@ public class Transfer {
 
     private int amount;
 
+    private Long missionId;
+
     private LocalDateTime transferredAt;
+
+    public static Transfer missionReward(Long fromAccountId, Long toAccountId, int amount, Long missionId, LocalDateTime at) {
+        Transfer t = new Transfer();
+        t.fromAccountId = fromAccountId;
+        t.toAccountId = toAccountId;
+        t.type = Type.MISSION_REWARD;
+        t.amount = amount;
+        t.missionId = missionId;
+        t.transferredAt = at;
+        return t;
+    }
 
     public enum Type { ALLOWANCE, SETTLEMENT, SHORTFALL_PAYMENT, AUTO_DEDUCT, MISSION_REWARD, PARENT_SUPPORT }
 }

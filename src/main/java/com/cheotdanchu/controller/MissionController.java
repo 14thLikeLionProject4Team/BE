@@ -7,6 +7,7 @@ import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionListResponse;
 import com.cheotdanchu.dto.MissionSubmitResponse;
+import com.cheotdanchu.dto.SubmissionReviewDtos;
 import com.cheotdanchu.service.MissionService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Locale;
 
 @RestController
 @RequiredArgsConstructor
@@ -57,6 +59,26 @@ public class MissionController {
             @PathVariable Long missionId,
             @RequestPart(value = "photos", required = false) List<MultipartFile> photos) {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_SUBMITTED, missionService.submitMission(personaId, missionId, photos));
+    }
+
+    @Operation(summary = "미션 승인", description = "부모 전용. 보상을 자녀 계좌로 보내고(MISSION_REWARD 이체) 알림. 목표 횟수를 채우면 COMPLETED, 아니면 IN_PROGRESS. 이번 정산 기간 한도를 넘으면 422.")
+    @PostMapping("/missions/submissions/{submissionId}/approve")
+    public ApiResponse<SubmissionReviewDtos.ApproveResponse> approve(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long submissionId) {
+        SubmissionReviewDtos.ApproveResponse result = missionService.approve(personaId, submissionId);
+        return ApiResponse.onSuccess(SuccessStatus.SUBMISSION_APPROVED,
+                String.format(Locale.KOREA, "%,d원을 보냈어요.", result.rewardAmount()), result);
+    }
+
+    @Operation(summary = "미션 반려", description = "부모 전용. reason: PHOTO_UNCLEAR | NOT_DONE. 보상 없이 미션을 IN_PROGRESS로 돌리고 사유와 함께 알림.")
+    @PostMapping("/missions/submissions/{submissionId}/reject")
+    public ApiResponse<SubmissionReviewDtos.RejectResponse> reject(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long submissionId,
+            @Valid @RequestBody SubmissionReviewDtos.RejectRequest request) {
+        return ApiResponse.onSuccess(SuccessStatus.SUBMISSION_REJECTED,
+                missionService.reject(personaId, submissionId, request.reason()));
     }
 
     @Operation(summary = "미션 상세 조회", description = "미션 한 건의 상세와 제출 이력(최신순, 사진 포함). 자녀·부모 공용. 다른 가족의 미션은 404.")

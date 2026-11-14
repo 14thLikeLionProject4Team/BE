@@ -83,6 +83,16 @@ public class Mission {
         status = Status.SUBMITTED;
     }
 
+    /** 승인 후: 승인된 횟수가 목표 횟수를 채우면 COMPLETED, 아니면 다음 회차를 위해 IN_PROGRESS */
+    public void afterApproval(int approvedCount) {
+        status = approvedCount >= targetCount() ? Status.COMPLETED : Status.IN_PROGRESS;
+    }
+
+    /** 반려 후: 다시 제출할 수 있게 IN_PROGRESS */
+    public void afterRejection() {
+        status = Status.IN_PROGRESS;
+    }
+
     /** 목표 횟수: 반복 주기와 기간으로 계산 (기간이 없으면 1회) */
     public int targetCount() {
         if (startDate == null || endDate == null) return 1;
