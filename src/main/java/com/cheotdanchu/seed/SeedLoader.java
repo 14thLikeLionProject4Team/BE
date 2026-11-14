@@ -13,6 +13,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -31,7 +32,9 @@ import java.util.Map;
  *  - accounts: 부모·자녀 계좌 (자녀 balance = 이번 달 쓸 수 있는 돈 + 지난달까지 남은 돈)
  *  - settlements: 월별 정산 이력 (진행 중인 달은 청구액을 비워 두고 카드 결제에서 계산)
  *  - family_settings: 용돈 보내는 날·결제일·미션 상한 비율·카드 한도
- *  - allowance_changes: 용돈 변경 이력 (아직 적용 전인 변경도 포함)
+ *  - allowance_changes: 용돈 변경 이력
+ *  - allowance_suggestions: 시드에서 아직 적용 전인 AI 제안(11월 73,000원)은 이력이 아니라 "대기 중인 제안"으로 넣는다.
+ *    시연에서 "다음 달부터 적용"·"유지" 버튼을 눌러 볼 수 있게 하려는 것이고, seed.json 은 AI 쪽도 읽어서 건드리지 않는다
  *  - card_payments, transfers(용돈·미션 보상 입금): 진행 중인 정산 기간 것만
  * 과거 결제·취소·상환 등은 해당 API를 만들 때 추가한다.
  *
@@ -39,6 +42,13 @@ import java.util.Map;
  */
 @Component
 public class SeedLoader implements ApplicationRunner {
+
+    /** 시드에 물가 데이터가 없어서 대기 제안의 근거는 명세 예시 값을 그대로 쓴다 */
+    private static final String DEMO_INFLATION_RATE = "4.2";
+    private static final String DEMO_SUGGESTION_BASIS =
+            "[{\"category\":\"식사\",\"monthlySpent\":25400,\"changeRate\":5.1},"
+                    + "{\"category\":\"교통\",\"monthlySpent\":12000,\"changeRate\":2.3}]";
+    private static final int DEMO_RANGE_STEP = 5000;
 
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
@@ -104,8 +114,8 @@ public class SeedLoader implements ApplicationRunner {
         }
 
         insertFamilySettings(familyId, rules, (Map<String, Object>) seed.get("card"));
-        insertAllowanceChanges(familyId, (List<Map<String, Object>>) seed.get("allowance_history"),
-                LocalDate.parse(str(today.get("date"))));
+        insertAllowanceChanges(familyId, str(((Map<String, Object>) seed.get("child")).get("name")),
+                (List<Map<String, Object>>) seed.get("allowance_history"), LocalDate.parse(str(today.get("date"))));
         if (settlementId == null) return; // 진행 중인 정산이 없는 가족 (성년 전환 후)
 
         // 취소·상환 등은 해당 API를 만들 때 추가
@@ -138,22 +148,42 @@ public class SeedLoader implements ApplicationRunner {
 
     /**
      * 용돈 변경 이력을 시드의 allowance_history 에서 넣는다. 첫 줄은 처음 정한 용돈(INITIAL)이다.
-     * 아직 적용 전인 변경(적용 시작일이 기준일 이후)은 기준일이 속한 달 1일에 정한 것으로 본다
-     * (명세 예시: "10월 1일 70,000→73,000원 · 물가 · AI 제안 · 11월부터").
+     * 아직 적용 전인 AI 제안(적용 시작일이 기준일 이후)은 이력에 넣지 않고 대기 중인 제안으로 넣는다.
+     * 부모가 "다음 달부터 적용"을 누르면 그때 이력에 생긴다 (명세 시드 안내: 시연하려면 해당 행을 빼고 PENDING 제안을 넣는다).
      */
-    private void insertAllowanceChanges(Long familyId, List<Map<String, Object>> history, LocalDate demoToday) {
+    private void insertAllowanceChanges(Long familyId, String childName, List<Map<String, Object>> history, LocalDate demoToday) {
         Integer prev = null;
         for (Map<String, Object> h : history) {
             LocalDate effectiveFrom = LocalDate.parse(str(h.get("from")) + "-01");
             int amount = intOf(h, "amount");
+            boolean aiSuggestion = str(h.get("reason")).contains("AI 제안");
+            if (aiSuggestion && effectiveFrom.isAfter(demoToday)) {
+                insertPendingSuggestion(familyId, childName, prev, amount, demoToday.withDayOfMonth(1));
+                continue;
+            }
+            // 아직 적용 전인 변경은 기준일이 속한 달 1일에 정한 것으로 본다
             LocalDate decidedOn = effectiveFrom.isAfter(demoToday) ? demoToday.withDayOfMonth(1) : effectiveFrom;
             jdbc.update("INSERT INTO allowance_changes (family_id, prev_amount, amount, effective_from, reason, source, created_at) "
                             + "VALUES (?, ?, ?, ?, ?, ?, ?)",
                     familyId, prev, amount, effectiveFrom, allowanceReasonOf(h),
-                    str(h.get("reason")).contains("AI 제안") ? "AI_SUGGESTION" : "PARENT",
+                    aiSuggestion ? "AI_SUGGESTION" : "PARENT",
                     Timestamp.valueOf(decidedOn.atTime(9, 0)));
             prev = amount;
         }
+    }
+
+    /**
+     * 대기 중인 AI 용돈 제안. 시드에 물가 데이터가 없어서 물가 상승률과 근거는 명세 예시 값으로 고정하고,
+     * 참고 구간은 현재 용돈부터 제안 금액을 5,000원 단위로 올림한 값까지로 한다 (70,000 ~ 75,000원).
+     */
+    private void insertPendingSuggestion(Long familyId, String childName, Integer current, int suggested, LocalDate createdOn) {
+        if (current == null) throw new IllegalStateException("AI 제안의 현재 용돈을 알 수 없어요 (앞선 용돈 이력이 없음)");
+        int rangeMax = (suggested + DEMO_RANGE_STEP - 1) / DEMO_RANGE_STEP * DEMO_RANGE_STEP;
+        jdbc.update("INSERT INTO allowance_suggestions (family_id, current_amount, suggested_amount, range_min, range_max, "
+                        + "inflation_rate, basis, explanation, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)",
+                familyId, current, suggested, current, rangeMax, new BigDecimal(DEMO_INFLATION_RATE), DEMO_SUGGESTION_BASIS,
+                childName + "가 자주 결제하는 품목의 물가가 평균 " + DEMO_INFLATION_RATE + "% 올랐어요.",
+                Timestamp.valueOf(createdOn.atStartOfDay()));
     }
 
     private static String allowanceReasonOf(Map<String, Object> h) {

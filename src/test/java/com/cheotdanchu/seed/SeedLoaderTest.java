@@ -12,6 +12,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** 서버가 켜질 때 적재가 끝난 개발 DB를 쓰며, 테스트 안에서 적재 테이블을 비웠다가 마지막에 다시 채운다 (MySQL 필요) */
 @SpringBootTest
@@ -42,15 +43,15 @@ class SeedLoaderTest {
         }
     }
 
-    // 가족 A: 2025-11 60,000원(처음) → 2026-03 70,000원(대학 입학) → 2026-11 73,000원(물가·AI 제안, 기준일 달 1일에 정함)
+    // 가족 A: 2025-11 60,000원(처음) → 2026-03 70,000원(대학 입학). 2026-11 73,000원(물가·AI 제안)은 아직 적용 전이라
+    // 이력이 아니라 대기 중인 제안으로 들어간다 (부모가 "다음 달부터 적용"을 누르면 그때 이력에 생긴다)
     @Test
-    void 용돈_변경_이력이_시드대로_들어간다() {
+    void 용돈_변경_이력에는_적용된_것만_들어간다() {
         List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT prev_amount, amount, effective_from, reason, source, "
-                        + "DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS decided "
+                "SELECT prev_amount, amount, effective_from, reason, source "
                         + "FROM allowance_changes WHERE family_id = 1 ORDER BY effective_from");
 
-        assertEquals(3, rows.size());
+        assertEquals(2, rows.size());
         assertNull(rows.get(0).get("prev_amount"));
         assertEquals(60000, ((Number) rows.get(0).get("amount")).intValue());
         assertEquals("INITIAL", rows.get(0).get("reason"));
@@ -59,12 +60,30 @@ class SeedLoaderTest {
         assertEquals(70000, ((Number) rows.get(1).get("amount")).intValue());
         assertEquals("SCHOOL", rows.get(1).get("reason"));
         assertEquals("PARENT", rows.get(1).get("source"));
+    }
 
-        assertEquals(73000, ((Number) rows.get(2).get("amount")).intValue());
-        assertEquals("2026-11-01", rows.get(2).get("effective_from").toString());
-        assertEquals("INFLATION", rows.get(2).get("reason"));
-        assertEquals("AI_SUGGESTION", rows.get(2).get("source"));
-        assertEquals("2026-10-01 09:00", rows.get(2).get("decided"));
+    // 시연에서 적용·유지 버튼을 눌러 볼 수 있게 가족 A에 대기 중인 제안을 하나 넣는다. 물가 근거는 명세 예시 값이다
+    @Test
+    void 가족A에는_대기_중인_AI_제안이_들어간다() {
+        Map<String, Object> s = jdbc.queryForMap(
+                "SELECT current_amount, suggested_amount, range_min, range_max, inflation_rate, status, explanation, "
+                        + "CAST(basis AS CHAR) AS basis, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created "
+                        + "FROM allowance_suggestions WHERE family_id = 1");
+
+        assertEquals(70000, ((Number) s.get("current_amount")).intValue());
+        assertEquals(73000, ((Number) s.get("suggested_amount")).intValue());
+        assertEquals(70000, ((Number) s.get("range_min")).intValue());
+        assertEquals(75000, ((Number) s.get("range_max")).intValue());
+        assertEquals("4.2", s.get("inflation_rate").toString());
+        assertEquals("PENDING", s.get("status"));
+        assertEquals("루피가 자주 결제하는 품목의 물가가 평균 4.2% 올랐어요.", s.get("explanation"));
+        assertEquals("2026-10-01 00:00", s.get("created"));
+        assertTrue(s.get("basis").toString().contains("식사"));
+    }
+
+    @Test
+    void 성년_가족_B에는_제안이_없다() {
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM allowance_suggestions WHERE family_id = 2", Integer.class));
     }
 
     @Test
@@ -88,6 +107,7 @@ class SeedLoaderTest {
         jdbc.update("DELETE FROM accounts");
         jdbc.update("DELETE FROM family_settings");
         jdbc.update("DELETE FROM allowance_changes");
+        jdbc.update("DELETE FROM allowance_suggestions");
     }
 
     private int count(String table) {
