@@ -59,11 +59,7 @@ public class AllowanceSuggestionService {
         Member parent = parent(personaId);
         if (status == AllowanceSuggestion.Status.PENDING) throw new GeneralException(ErrorStatus.INVALID_INPUT);
 
-        AllowanceSuggestion suggestion = suggestionRepository.findByIdForUpdate(suggestionId)
-                .filter(s -> s.getFamilyId().equals(parent.getFamily().getFamilyId()))
-                .orElseThrow(() -> new GeneralException(ErrorStatus.SUGGESTION_NOT_FOUND));
-        if (!suggestion.isPending()) throw new GeneralException(ErrorStatus.ALREADY_DECIDED);
-        if (isOutdated(suggestion, parent.getFamily().getFamilyId())) throw new GeneralException(ErrorStatus.SUGGESTION_OUTDATED);
+        AllowanceSuggestion suggestion = lockPending(parent.getFamily().getFamilyId(), suggestionId);
 
         if (status == AllowanceSuggestion.Status.KEPT) {
             suggestion.keep();
@@ -75,6 +71,20 @@ public class AllowanceSuggestionService {
         suggestion.apply();
         return new AllowanceSuggestionDtos.DecisionResponse(
                 suggestionId, suggestion.getStatus(), suggestion.getSuggestedAmount(), change.getEffectiveFrom());
+    }
+
+    /**
+     * 처리할 제안을 잠그고 꺼낸다. 다른 가족·없는 제안은 404, 이미 처리했으면 409, 그 사이 용돈이 바뀌었으면 409.
+     * 제안을 처리하는 모든 경로(처리 API, 용돈 변경 저장)가 같이 쓴다.
+     */
+    @Transactional
+    public AllowanceSuggestion lockPending(Long familyId, Long suggestionId) {
+        AllowanceSuggestion suggestion = suggestionRepository.findByIdForUpdate(suggestionId)
+                .filter(s -> s.getFamilyId().equals(familyId))
+                .orElseThrow(() -> new GeneralException(ErrorStatus.SUGGESTION_NOT_FOUND));
+        if (!suggestion.isPending()) throw new GeneralException(ErrorStatus.ALREADY_DECIDED);
+        if (isOutdated(suggestion, familyId)) throw new GeneralException(ErrorStatus.SUGGESTION_OUTDATED);
+        return suggestion;
     }
 
     private Member parent(Long personaId) {

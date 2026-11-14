@@ -24,7 +24,18 @@ public class FamilySetting {
 
     private boolean autoTransfer;
 
+    /** 카드 결제일 (매월 며칠) */
+    @JdbcTypeCode(SqlTypes.TINYINT)
+    private int settlementDay;
+
     /** 미션 보상 한 달 상한 (용돈의 %) */
     @JdbcTypeCode(SqlTypes.TINYINT)
     private int missionCapRate;
+
+    /** 용돈 정하기에서 저장한 보내는 날·자동이체·결제일 */
+    public void updateAllowanceSettings(int allowanceDay, boolean autoTransfer, int settlementDay) {
+        this.allowanceDay = allowanceDay;
+        this.autoTransfer = autoTransfer;
+        this.settlementDay = settlementDay;
+    }
 }

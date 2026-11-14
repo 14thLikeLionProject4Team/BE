@@ -20,7 +20,7 @@ import java.util.Optional;
 
 /**
  * 용돈 변경을 이력에 남기고 아이에게 알리는 공통 저장 로직.
- * AI 제안 "다음 달부터 적용"과 (앞으로 만들) 용돈 변경 저장이 같이 쓴다.
+ * AI 제안 "다음 달부터 적용"과 용돈 변경 저장(AllowanceSettingService)이 같이 쓴다.
  */
 @Service
 @RequiredArgsConstructor
@@ -39,7 +39,7 @@ public class AllowanceChangeService {
     /** 그날 적용 중인 월 용돈 */
     public Optional<Integer> amountOn(Long familyId, LocalDate date) {
         return allowanceChangeRepository
-                .findFirstByFamilyIdAndEffectiveFromLessThanEqualOrderByEffectiveFromDesc(familyId, date)
+                .findFirstByFamilyIdAndEffectiveFromLessThanEqualOrderByEffectiveFromDescChangeIdDesc(familyId, date)
                 .map(AllowanceChange::getAmount);
     }
 
@@ -47,8 +47,9 @@ public class AllowanceChangeService {
     public AllowanceChange record(Member parent, int amount, AllowanceChange.Reason reason, AllowanceChange.Source source) {
         LocalDate today = seedRepository.today();
         Long familyId = parent.getFamily().getFamilyId();
-        Integer prevAmount = amountOn(familyId, today).orElse(null);
         LocalDate effectiveFrom = nextEffectiveDate();
+        // 이미 같은 날부터 적용될 용돈이 정해져 있으면 그것을 이전 금액으로 본다 (이력이 72,000 → 74,000 처럼 이어진다)
+        Integer prevAmount = amountOn(familyId, effectiveFrom).orElse(null);
         // 이력·알림 시각은 데모 기준일 + 지금 시각 (실제 날짜로 남기면 다른 화면의 기간 계산과 어긋난다)
         LocalDateTime now = today.atTime(LocalTime.now().withNano(0));
 
