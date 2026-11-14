@@ -8,6 +8,7 @@ import com.cheotdanchu.dto.MissionCreateRequest;
 import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionListResponse;
+import com.cheotdanchu.dto.MissionQueryDtos;
 import com.cheotdanchu.dto.MissionSubmitResponse;
 import com.cheotdanchu.dto.SubmissionReviewDtos;
 import com.cheotdanchu.entity.Account;
@@ -31,6 +32,7 @@ import com.cheotdanchu.repository.SettlementRepository;
 import com.cheotdanchu.repository.SubmissionPhotoRepository;
 import com.cheotdanchu.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -54,6 +56,9 @@ public class MissionService {
 
     private static final EnumSet<Mission.Status> ACTIVE =
             EnumSet.of(Mission.Status.NEW, Mission.Status.IN_PROGRESS, Mission.Status.SUBMITTED);
+    private static final EnumSet<Mission.Status> ENDED =
+            EnumSet.of(Mission.Status.COMPLETED, Mission.Status.CANCELED, Mission.Status.EXPIRED);
+    private static final int ENDED_PAGE_SIZE = 20;
 
     private final MemberRepository memberRepository;
     private final MissionRepository missionRepository;
@@ -68,9 +73,7 @@ public class MissionService {
     private final SeedRepository seedRepository;
     private final PhotoStorage photoStorage;
 
-    public MissionListResponse getMissions(Long personaId, String status) {
-        if (!"active".equals(status)) throw new GeneralException(ErrorStatus.INVALID_MISSION_STATUS);
-
+    public MissionListResponse getActiveMissions(Long personaId) {
         Member member = memberRepository.getPersona(personaId);
 
         LocalDate today = seedRepository.today();
@@ -117,8 +120,20 @@ public class MissionService {
      * 용돈 설정이 없으면 한도 없음, 진행 중인 정산이 없으면 받은 보상 0.
      */
     private long remainingRewardCap(Long familyId, Optional<Member> child) {
+        return rewardCap(familyId, child).map(RewardCap::remaining).orElse(Long.MAX_VALUE);
+    }
+
+    /** 이번 정산 기간 보상 한도와 받은 보상. 정산 기간 끝나는 달의 용돈 기준이고, 데모 기준일 화면 숫자와 같다 */
+    record RewardCap(YearMonth month, int rate, long cap, long received) {
+        long remaining() {
+            return Math.max(cap - received, 0);
+        }
+    }
+
+    /** 용돈 설정이나 용돈이 없으면 한도 없음(empty) */
+    private Optional<RewardCap> rewardCap(Long familyId, Optional<Member> child) {
         FamilySetting setting = familySettingRepository.findById(familyId).orElse(null);
-        if (setting == null) return Long.MAX_VALUE;
+        if (setting == null) return Optional.empty();
 
         LocalDate today = seedRepository.today();
         Optional<Settlement> current = settlementRepository.findCurrent(familyId, today);
@@ -127,7 +142,7 @@ public class MissionService {
         Integer allowance = allowanceChangeRepository.findForMonth(familyId, month, setting.getAllowanceDay())
                 .map(AllowanceChange::getAmount)
                 .orElse(null);
-        if (allowance == null) return Long.MAX_VALUE;
+        if (allowance == null) return Optional.empty();
 
         long cap = (long) allowance * setting.getMissionCapRate() / 100;
         long received = current.isEmpty() ? 0L : child.flatMap(c -> accountRepository.findByMemberId(c.getMemberId()))
@@ -135,7 +150,7 @@ public class MissionService {
                         current.get().getPeriodStart().atStartOfDay(),
                         current.get().getPeriodEnd().plusDays(1).atStartOfDay()))
                 .orElse(0L);
-        return Math.max(cap - received, 0);
+        return Optional.of(new RewardCap(month, setting.getMissionCapRate(), cap, received));
     }
 
     @Transactional
@@ -240,16 +255,83 @@ public class MissionService {
         return seedRepository.today().atTime(LocalTime.now().withNano(0));
     }
 
+    /** 제안 미션 목록. 자녀는 내가 제안한 미션(보류 포함), 부모는 아직 결정하지 않은 제안만 */
+    public MissionQueryDtos.ProposedListResponse getProposedMissions(Long personaId) {
+        Member member = memberRepository.getPersona(personaId);
+        EnumSet<Mission.Status> statuses = member.getRole() == Member.Role.CHILD
+                ? EnumSet.of(Mission.Status.PROPOSED, Mission.Status.ON_HOLD)
+                : EnumSet.of(Mission.Status.PROPOSED);
+        List<MissionQueryDtos.ProposedMission> missions = missionRepository
+                .findByFamily_FamilyIdAndStatusInOrderByCreatedAtDesc(member.getFamily().getFamilyId(), statuses)
+                .stream()
+                .map(m -> new MissionQueryDtos.ProposedMission(m.getMissionId(), m.getTitle(), m.getMissionType(),
+                        m.getStatus(), m.getCriteria(), m.getDesiredReward(), m.getCreatedAt()))
+                .toList();
+        return new MissionQueryDtos.ProposedListResponse(missions.size(), missions);
+    }
+
+    /** 종료 미션 목록 (완료·취소·만료), 최신순. cursor는 이전 페이지 마지막 missionId */
+    public MissionQueryDtos.EndedListResponse getEndedMissions(Long personaId, Long cursor) {
+        Member member = memberRepository.getPersona(personaId);
+        List<Mission> page = missionRepository.findByFamily_FamilyIdAndStatusInAndMissionIdLessThanOrderByMissionIdDesc(
+                member.getFamily().getFamilyId(), ENDED, cursor == null ? Long.MAX_VALUE : cursor,
+                PageRequest.of(0, ENDED_PAGE_SIZE + 1));
+        boolean hasNext = page.size() > ENDED_PAGE_SIZE;
+        List<MissionQueryDtos.EndedMission> missions = page.stream().limit(ENDED_PAGE_SIZE)
+                .map(m -> new MissionQueryDtos.EndedMission(m.getMissionId(), m.getTitle(), m.getStatus(), m.getRewardAmount(),
+                        transferRepository.sumByMission(m.getMissionId(), Transfer.Type.MISSION_REWARD), endedAt(m)))
+                .toList();
+        return new MissionQueryDtos.EndedListResponse(missions, hasNext ? missions.get(missions.size() - 1).missionId() : null);
+    }
+
+    /** 끝난 날: 완료된 미션은 마지막 승인일, 그 외(취소·만료)는 마감일 */
+    private LocalDate endedAt(Mission m) {
+        return submissionRepository
+                .findFirstByMission_MissionIdAndReviewStatusOrderByReviewedAtDesc(m.getMissionId(), MissionSubmission.ReviewStatus.APPROVED)
+                .filter(s -> m.getStatus() == Mission.Status.COMPLETED && s.getReviewedAt() != null)
+                .map(s -> s.getReviewedAt().toLocalDate())
+                .orElse(m.getEndDate());
+    }
+
+    /** 부모 확인을 기다리는 제출 목록. 자녀의 "확인 기다리는 미션"도 같은 API를 쓴다 */
+    public MissionQueryDtos.PendingListResponse getPendingSubmissions(Long personaId) {
+        Member member = memberRepository.getPersona(personaId);
+        List<MissionSubmission> submissions = submissionRepository.findByMission_Family_FamilyIdAndReviewStatusOrderBySubmittedAtDesc(
+                member.getFamily().getFamilyId(), MissionSubmission.ReviewStatus.PENDING);
+        Map<Long, List<String>> photos = photosBySubmission(submissions);
+        List<MissionQueryDtos.PendingSubmission> items = submissions.stream()
+                .map(s -> new MissionQueryDtos.PendingSubmission(s.getSubmissionId(), s.getMission().getMissionId(),
+                        s.getMission().getTitle(), s.getMission().getRewardAmount(),
+                        photos.getOrDefault(s.getSubmissionId(), List.of()), s.getSubmittedAt()))
+                .toList();
+        return new MissionQueryDtos.PendingListResponse(items.size(), items);
+    }
+
+    /** 이번 달 보낸 보상과 한 달 상한. 미션 생성·승인의 한도 계산과 같은 값이라 자녀·부모 화면 숫자가 같다 */
+    public MissionQueryDtos.RewardSummaryResponse getRewardSummary(Long personaId) {
+        Member member = memberRepository.getPersona(personaId);
+        Long familyId = member.getFamily().getFamilyId();
+        Optional<Member> child = memberRepository.findByFamily_FamilyIdAndRole(familyId, Member.Role.CHILD);
+        return rewardCap(familyId, child)
+                .map(c -> new MissionQueryDtos.RewardSummaryResponse(c.month().toString(), c.received(), c.cap(), c.rate(), c.remaining()))
+                .orElseGet(() -> new MissionQueryDtos.RewardSummaryResponse(YearMonth.from(seedRepository.today()).toString(), 0, null, null, null));
+    }
+
+    private Map<Long, List<String>> photosBySubmission(List<MissionSubmission> submissions) {
+        if (submissions.isEmpty()) return Map.of();
+        return photoRepository
+                .findBySubmission_SubmissionIdInOrderByPhotoId(submissions.stream().map(MissionSubmission::getSubmissionId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(p -> p.getSubmission().getSubmissionId(),
+                        Collectors.mapping(SubmissionPhoto::getImageUrl, Collectors.toList())));
+    }
+
     public MissionDetailResponse getMission(Long personaId, Long missionId) {
         Member member = memberRepository.getPersona(personaId);
         Mission m = familyMission(member, missionId);
 
         List<MissionSubmission> submissions = submissionRepository.findByMission_MissionIdOrderBySubmittedAtDesc(missionId);
-        Map<Long, List<String>> photos = photoRepository
-                .findBySubmission_SubmissionIdInOrderByPhotoId(submissions.stream().map(MissionSubmission::getSubmissionId).toList())
-                .stream()
-                .collect(Collectors.groupingBy(p -> p.getSubmission().getSubmissionId(),
-                        Collectors.mapping(SubmissionPhoto::getImageUrl, Collectors.toList())));
+        Map<Long, List<String>> photos = photosBySubmission(submissions);
 
         int done = (int) submissions.stream()
                 .filter(s -> s.getReviewStatus() == MissionSubmission.ReviewStatus.APPROVED)
