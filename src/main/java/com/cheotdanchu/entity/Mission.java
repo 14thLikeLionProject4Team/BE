@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 
 @Entity
@@ -52,6 +53,10 @@ public class Mission {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Status status;
+
+    /** DB 기본값(CURRENT_TIMESTAMP)으로 채운다 */
+    @Column(insertable = false, updatable = false)
+    private LocalDateTime createdAt;
 
     /** 부모가 만든 미션은 바로 열린다 (NEW) */
     public static Mission createByParent(Family family, MissionCreateRequest req) {
