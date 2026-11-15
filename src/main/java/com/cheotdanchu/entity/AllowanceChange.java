@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -51,7 +52,13 @@ public class AllowanceChange {
     }
 
     /** 바꾸는 이유: 처음 / 물가 / 진학 / 다시 약속 / 기타 */
-    public enum Reason { INITIAL, INFLATION, SCHOOL, RENEGOTIATION, ETC }
+    @Getter
+    @RequiredArgsConstructor
+    public enum Reason {
+        INITIAL("처음"), INFLATION("물가"), SCHOOL("진학"), RENEGOTIATION("다시 약속"), ETC("기타");
+
+        private final String label;
+    }
 
     /** 누가 정했나: 부모가 직접 / AI 제안을 적용 */
     public enum Source { PARENT, AI_SUGGESTION }

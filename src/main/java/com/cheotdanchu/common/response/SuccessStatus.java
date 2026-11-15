@@ -25,6 +25,7 @@ public enum SuccessStatus {
     ALLOWANCE_SUGGESTION_OK(200, "AI 용돈 제안 조회 성공"),
     ALLOWANCE_SUGGESTION_APPLIED(200, "용돈 변경을 적용했어요."),
     ALLOWANCE_SUGGESTION_KEPT(200, "지금 용돈을 유지해요."),
+    ALLOWANCE_SETUP_OK(200, "조회 성공"),
     ALLOWANCE_CHANGE_SAVED(201, "용돈을 저장했어요"),
     ALLOWANCE_SETTING_SAVED(200, "설정을 저장했어요. 용돈 금액은 그대로예요.");
 
