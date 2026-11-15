@@ -9,6 +9,7 @@ public enum ErrorStatus {
 
     PERSONA_HEADER_MISSING(400, "X-Persona-Id 헤더가 필요합니다"),
     INVALID_MISSION_STATUS(400, "지원하지 않는 미션 상태입니다"),
+    INVALID_SUBMISSION_STATUS(400, "지원하지 않는 제출 상태입니다"),
     PERSONA_NOT_FOUND(404, "페르소나를 찾을 수 없습니다"),
     MISSION_NOT_FOUND(404, "미션을 찾을 수 없습니다"),
     INVALID_REQUEST_VALUE(400, "요청 값의 형식이 올바르지 않습니다"),

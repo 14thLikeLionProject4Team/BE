@@ -21,4 +21,8 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
             """)
     long sumReceived(@Param("accountId") Long accountId, @Param("type") Transfer.Type type,
                      @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /** 미션 하나에 지금까지 지급한 보상 합계 */
+    @Query("select coalesce(sum(t.amount), 0L) from Transfer t where t.missionId = :missionId and t.type = :type")
+    long sumByMission(@Param("missionId") Long missionId, @Param("type") Transfer.Type type);
 }
