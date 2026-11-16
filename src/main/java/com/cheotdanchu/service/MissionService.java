@@ -4,6 +4,7 @@ import com.cheotdanchu.ai.SeedRepository;
 import com.cheotdanchu.common.config.PhotoStorage;
 import com.cheotdanchu.common.exception.GeneralException;
 import com.cheotdanchu.common.response.ErrorStatus;
+import com.cheotdanchu.common.util.KoreanText;
 import com.cheotdanchu.dto.MissionCreateRequest;
 import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionDetailResponse;
@@ -36,6 +37,7 @@ import com.cheotdanchu.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -324,6 +326,27 @@ public class MissionService {
 
         return new SubmissionReviewDtos.RejectResponse(submission.getSubmissionId(), submission.getReviewStatus(),
                 submission.getRejectReason(), mission.getStatus());
+    }
+
+    /**
+     * 확인을 기다리는 제출을 부모에게 다시 알린다 (MISSION_REMIND, refId = submissionId). 이미 승인·반려됐으면 409.
+     * 부모 알림함에 같은 알림이 쌓이지 않도록 제출 하나에 하루(데모 기준일) 한 번만 보낸다.
+     * 연타하면 제출 행 잠금에서 줄을 서는데, 잠금이 풀린 뒤 앞 요청이 저장한 알림이 보여야 해서 READ_COMMITTED로 읽는다
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void remindSubmission(Long personaId, Long submissionId) {
+        Member child = child(personaId);
+        MissionSubmission submission = familySubmission(child, submissionId);
+        if (!submission.isPending()) throw new GeneralException(ErrorStatus.ALREADY_REVIEWED, "이미 부모님이 확인한 미션이에요.");
+        if (notificationRepository.existsByTypeAndRefIdAndCreatedAtGreaterThanEqual(
+                Notification.Type.MISSION_REMIND, submissionId, seedRepository.today().atStartOfDay())) {
+            throw new GeneralException(ErrorStatus.ALREADY_REMINDED);
+        }
+
+        memberRepository.findByFamily_FamilyIdAndRole(child.getFamily().getFamilyId(), Member.Role.PARENT)
+                .ifPresent(p -> notificationRepository.save(Notification.of(p, Notification.Type.MISSION_REMIND,
+                        child.getName() + (KoreanText.hasBatchim(child.getName()) ? "이" : "가") + " 미션 확인을 기다려요",
+                        submission.getMission().getTitle(), submission.getSubmissionId(), demoNow())));
     }
 
     private Member child(Long personaId) {

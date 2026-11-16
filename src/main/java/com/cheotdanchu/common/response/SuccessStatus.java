@@ -31,6 +31,7 @@ public enum SuccessStatus {
     MISSION_HELD(200, "제안을 보류했어요."),
     MISSION_UPDATED(200, "미션을 수정했어요."),
     MISSION_CANCELED(200, "미션을 취소했어요."),
+    MISSION_REMINDED(200, "부모님께 다시 알림을 보냈어요."),
     MISSION_SUBMITTED(201, "완료를 제출했어요. 부모님 확인을 기다려요."),
     SUBMISSION_APPROVED(200, "보상을 보냈어요."),
     SUBMISSION_REJECTED(200, "아이에게 다시 부탁했어요."),

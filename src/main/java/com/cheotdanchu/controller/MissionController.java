@@ -117,6 +117,15 @@ public class MissionController {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_SUBMITTED, missionService.submitMission(personaId, missionId, photos));
     }
 
+    @Operation(summary = "승인 재요청", description = "자녀 전용. 확인을 기다리는 제출을 부모에게 다시 알린다(MISSION_REMIND, refId = submissionId). 이미 승인·반려된 제출은 409, 다른 가족의 제출은 404.")
+    @PostMapping("/missions/submissions/{submissionId}/remind")
+    public ApiResponse<Void> remindSubmission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long submissionId) {
+        missionService.remindSubmission(personaId, submissionId);
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_REMINDED, null);
+    }
+
     @Operation(summary = "미션 승인", description = "부모 전용. 보상을 자녀 계좌로 보내고(MISSION_REWARD 이체) 알림. 목표 횟수를 채우면 COMPLETED, 아니면 IN_PROGRESS. 이번 정산 기간 한도를 넘으면 422.")
     @PostMapping("/missions/submissions/{submissionId}/approve")
     public ApiResponse<SubmissionReviewDtos.ApproveResponse> approve(

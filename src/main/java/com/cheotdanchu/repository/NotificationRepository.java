@@ -4,6 +4,7 @@ import com.cheotdanchu.entity.Notification;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
@@ -13,4 +14,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
             Long memberId, Long cursor, Pageable pageable);
 
     long countByMember_MemberIdAndReadAtIsNull(Long memberId);
+
+    /** 같은 대상(refId)에 그 시각 이후 보낸 같은 종류 알림이 있는지 */
+    boolean existsByTypeAndRefIdAndCreatedAtGreaterThanEqual(Notification.Type type, Long refId, LocalDateTime from);
 }

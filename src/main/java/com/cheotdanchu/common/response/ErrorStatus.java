@@ -30,6 +30,7 @@ public enum ErrorStatus {
     SUBMISSION_NOT_FOUND(404, "제출 기록을 찾을 수 없습니다"),
     NOTIFICATION_NOT_FOUND(404, "알림을 찾을 수 없습니다"),
     ALREADY_REVIEWED(409, "이미 처리된 제출이에요."),
+    ALREADY_REMINDED(409, "오늘은 이미 부모님께 알림을 보냈어요."),
     SUGGESTION_NOT_FOUND(404, "제안을 찾을 수 없습니다"),
     ALREADY_DECIDED(409, "이미 처리한 제안이에요."),
     SUGGESTION_OUTDATED(409, "용돈이 이미 바뀌어서 이 제안은 쓸 수 없어요."),
