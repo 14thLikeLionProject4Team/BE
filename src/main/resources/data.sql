@@ -35,3 +35,8 @@ INSERT INTO mission_submissions (mission_id, review_status, submitted_at, review
 (1, 'APPROVED', '2026-10-18 19:00:00', '2026-10-18 21:00:00'),
 (2, 'PENDING',  '2026-10-18 20:30:00', NULL);
 
+
+-- 5. 알림 (시연용. 테스트가 아이(2) 알림 개수를 세므로 부모 알림만 넣는다)
+INSERT INTO notifications (member_id, type, title, body, ref_id, read_at, created_at) VALUES
+(1, 'SETTLEMENT_RESULT', '9월 결제일 정산을 마쳤어요', '루피가 결제일에 모두 갚았어요.', NULL, '2026-09-25 20:00:00', '2026-09-25 18:00:00'),
+(1, 'MISSION_REMIND', '루피가 미션 확인을 기다려요', '이번 주 영수증 정리하기', 5, NULL, '2026-10-19 09:10:00');

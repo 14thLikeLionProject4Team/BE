@@ -26,6 +26,7 @@ public enum ErrorStatus {
     MISSION_NOT_OPENABLE(409, "제안·보류·추천 미션만 열 수 있어요."),
     MISSION_NOT_HOLDABLE(409, "제안된 미션만 보류할 수 있어요."),
     SUBMISSION_NOT_FOUND(404, "제출 기록을 찾을 수 없습니다"),
+    NOTIFICATION_NOT_FOUND(404, "알림을 찾을 수 없습니다"),
     ALREADY_REVIEWED(409, "이미 처리된 제출이에요."),
     SUGGESTION_NOT_FOUND(404, "제안을 찾을 수 없습니다"),
     ALREADY_DECIDED(409, "이미 처리한 제안이에요."),

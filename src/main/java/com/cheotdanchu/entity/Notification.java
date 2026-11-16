@@ -49,6 +49,11 @@ public class Notification {
         return n;
     }
 
+    /** 이미 읽은 알림이면 처음 읽은 시각을 그대로 둔다 */
+    public void markRead(LocalDateTime at) {
+        if (readAt == null) readAt = at;
+    }
+
     public enum Type {
         SETTLEMENT_RESULT, SHORTFALL_EXPECTED, SHORTFALL_RESOLVED, AUTO_DEDUCT, RISK_PAYMENT, ADULT_TRANSITION,
         ALLOWANCE_CHANGED, NEW_MISSION, MISSION_REJECTED, MISSION_REWARD, MISSION_PROPOSED, MISSION_REMIND
