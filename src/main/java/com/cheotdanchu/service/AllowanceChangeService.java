@@ -36,6 +36,11 @@ public class AllowanceChangeService {
         return YearMonth.from(seedRepository.today()).plusMonths(1).atDay(1);
     }
 
+    /** 지금 정하면 적용되는 날(다음 달 1일)에 적용될 월 용돈. 이미 정해 둔 용돈이 있으면 그 값 */
+    public Optional<Integer> scheduledAmount(Long familyId) {
+        return amountOn(familyId, nextEffectiveDate());
+    }
+
     /** 그날 적용 중인 월 용돈 */
     public Optional<Integer> amountOn(Long familyId, LocalDate date) {
         return allowanceChangeRepository
@@ -49,7 +54,7 @@ public class AllowanceChangeService {
         Long familyId = parent.getFamily().getFamilyId();
         LocalDate effectiveFrom = nextEffectiveDate();
         // 이미 같은 날부터 적용될 용돈이 정해져 있으면 그것을 이전 금액으로 본다 (이력이 72,000 → 74,000 처럼 이어진다)
-        Integer prevAmount = amountOn(familyId, effectiveFrom).orElse(null);
+        Integer prevAmount = scheduledAmount(familyId).orElse(null);
         // 이력·알림 시각은 데모 기준일 + 지금 시각 (실제 날짜로 남기면 다른 화면의 기간 계산과 어긋난다)
         LocalDateTime now = today.atTime(LocalTime.now().withNano(0));
 
@@ -59,12 +64,17 @@ public class AllowanceChangeService {
         memberRepository.findByFamily_FamilyIdAndRole(familyId, Member.Role.CHILD)
                 .ifPresent(child -> notificationRepository.save(Notification.of(
                         child, Notification.Type.ALLOWANCE_CHANGED, "용돈이 바뀌어요",
-                        message(effectiveFrom, amount, reason), change.getChangeId(), now)));
+                        message(effectiveFrom, amount, prevAmount, reason), change.getChangeId(), now)));
         return change;
     }
 
-    private static String message(LocalDate effectiveFrom, int amount, AllowanceChange.Reason reason) {
+    /**
+     * 저장하면 아이에게 가는 알림 문구. 저장 전 미리보기도 같은 문구를 쓴다.
+     * 물가 때문이라는 설명은 금액이 실제로 오를 때만 붙인다 (물가를 고르고 내리거나 처음 정한 용돈이면 붙이지 않는다).
+     */
+    public static String message(LocalDate effectiveFrom, int amount, Integer prevAmount, AllowanceChange.Reason reason) {
         String text = String.format(Locale.KOREA, "%d월부터 용돈이 %,d원이 돼요.", effectiveFrom.getMonthValue(), amount);
-        return reason == AllowanceChange.Reason.INFLATION ? text + " 물가가 올라서 부모님이 올렸어요." : text;
+        boolean raised = prevAmount != null && amount > prevAmount;
+        return reason == AllowanceChange.Reason.INFLATION && raised ? text + " 물가가 올라서 부모님이 올렸어요." : text;
     }
 }
