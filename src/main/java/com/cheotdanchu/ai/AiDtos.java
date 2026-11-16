@@ -16,6 +16,7 @@ public final class AiDtos {
      * sources: 답 아래에 보여줄 출처 (금융지식일 때만)
      * crisis: true면 위기 안내 문장이에요. 화면에서 강조해 주세요.
      * fallback: 검사에 걸려 대체 문장을 썼으면 그 이유 (정상이면 null). 화면에는 안 보여줘도 돼요.
+     * toParent: 고민 대화에서 아이가 부모님께 바라는 게 처음 나오면 전할 말 후보 (없으면 null)
      */
     public record ChatResponse(
             String kind,
@@ -24,7 +25,17 @@ public final class AiDtos {
             List<String> usedIds,
             List<String> retrievedIds,
             boolean crisis,
-            String fallback) {}
+            String fallback,
+            ToParent toParent) {
+
+        public ChatResponse(String kind, String answer, List<RagCard.Source> sources, List<String> usedIds,
+                            List<String> retrievedIds, boolean crisis, String fallback) {
+            this(kind, answer, sources, usedIds, retrievedIds, crisis, fallback, null);
+        }
+    }
+
+    /** 전할 말 후보. request는 부모님께 바라는 것, reason은 이유 (없을 수 있음) */
+    public record ToParent(String request, String reason) {}
 
     /** POST /api/ai/chat/end : 대화창을 나갈 때 */
     public record EndChatRequest(String personaId) {}

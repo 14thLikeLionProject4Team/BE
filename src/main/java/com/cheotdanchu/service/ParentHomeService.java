@@ -6,14 +6,17 @@ import com.cheotdanchu.common.response.ErrorStatus;
 import com.cheotdanchu.dto.AllowanceSuggestionDtos;
 import com.cheotdanchu.dto.MissionQueryDtos;
 import com.cheotdanchu.dto.ParentHomeDtos;
+import com.cheotdanchu.entity.ChildMessage;
 import com.cheotdanchu.entity.FamilySetting;
 import com.cheotdanchu.entity.Member;
 import com.cheotdanchu.entity.Settlement;
+import com.cheotdanchu.repository.ChildMessageRepository;
 import com.cheotdanchu.repository.FamilySettingRepository;
 import com.cheotdanchu.repository.MemberRepository;
 import com.cheotdanchu.repository.NotificationRepository;
 import com.cheotdanchu.repository.SettlementRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +41,7 @@ public class ParentHomeService {
     private final SeedRepository seedRepository;
     private final AllowanceSuggestionService allowanceSuggestionService;
     private final MissionService missionService;
+    private final ChildMessageRepository childMessageRepository;
 
     public ParentHomeDtos.HomeResponse getHome(Long personaId) {
         Member parent = parent(personaId);
@@ -63,7 +67,7 @@ public class ParentHomeService {
 
     /**
      * 부모가 지금 처리할 카드만 모은다 (별도 테이블 없음): AI 용돈 제안 → 아이가 전한 말 → 미션 확인 순.
-     * 전할 말(CHILD_MESSAGE)은 대화 기능을 만들 때 채운다. 카드가 없으면 빈 배열 (화면: "지금 정할 건 없어요")
+     * 전할 말은 아이가 전했고(SENT) 부모가 아직 답하지 않은 것만. 카드가 없으면 빈 배열 (화면: "지금 정할 건 없어요")
      */
     public ParentHomeDtos.DecisionsResponse getDecisions(Long personaId) {
         Member parent = parent(personaId);
@@ -78,6 +82,13 @@ public class ParentHomeService {
                     String.format(Locale.KOREA, "%s 결제 품목 물가가 %s%% 올랐어요", childName, suggestion.inflationRate().stripTrailingZeros().toPlainString()),
                     String.format(Locale.KOREA, "월 %,d원 → %,d원 (%+,d원)을 제안해요.", suggestion.currentAmount(), suggestion.suggestedAmount(), diff),
                     "AI 용돈 제안"));
+        }
+
+        for (ChildMessage m : childMessageRepository.findByFamilyIdAndStatus(
+                parent.getFamily().getFamilyId(), ChildMessage.Status.SENT, Sort.by("sentAt", "childMessageId"))) {
+            cards.add(new ParentHomeDtos.DecisionCard(ParentHomeDtos.CardType.CHILD_MESSAGE, m.getChildMessageId(),
+                    m.getRequest(), m.getReason(),
+                    m.getDelivery() == ChildMessage.Delivery.MONTHLY ? "월말 회고에서 전한 말" : "아이가 전한 말"));
         }
 
         for (MissionQueryDtos.PendingSubmission s : missionService.getPendingSubmissions(personaId).submissions()) {
