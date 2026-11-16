@@ -6,6 +6,7 @@ import com.cheotdanchu.common.response.ErrorStatus;
 import com.cheotdanchu.common.response.SuccessStatus;
 import com.cheotdanchu.dto.MissionCreateRequest;
 import com.cheotdanchu.dto.MissionCreateResponse;
+import com.cheotdanchu.dto.MissionProposalRequest;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionQueryDtos;
 import com.cheotdanchu.dto.MissionSubmitResponse;
@@ -75,6 +76,15 @@ public class MissionController {
             @RequestHeader("X-Persona-Id") Long personaId,
             @Valid @RequestBody MissionCreateRequest request) {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_CREATED, missionService.createMission(personaId, request));
+    }
+
+    @Operation(summary = "미션 제안", description = "자녀 전용. 미션 생성과 같은 필드인데 보상 대신 desiredReward(바라는 보상). PROPOSED로 저장, 부모에게 MISSION_PROPOSED 알림.")
+    @PostMapping("/missions/proposals")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<MissionCreateResponse> proposeMission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @Valid @RequestBody MissionProposalRequest request) {
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_PROPOSED, missionService.proposeMission(personaId, request));
     }
 
     @Operation(summary = "미션 완료 제출", description = "자녀 전용. multipart/form-data, photos(사진 인증 미션이면 1장 이상). NEW·IN_PROGRESS만 제출 가능, 제출하면 SUBMITTED.")

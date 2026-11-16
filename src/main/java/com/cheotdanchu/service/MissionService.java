@@ -8,6 +8,7 @@ import com.cheotdanchu.dto.MissionCreateRequest;
 import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionListResponse;
+import com.cheotdanchu.dto.MissionProposalRequest;
 import com.cheotdanchu.dto.MissionQueryDtos;
 import com.cheotdanchu.dto.MissionSubmitResponse;
 import com.cheotdanchu.dto.SubmissionReviewDtos;
@@ -94,24 +95,45 @@ public class MissionService {
 
     @Transactional
     public MissionCreateResponse createMission(Long personaId, MissionCreateRequest req) {
-        Member parent = memberRepository.getPersona(personaId);
-        if (parent.getRole() != Member.Role.PARENT) throw new GeneralException(ErrorStatus.PARENT_ONLY);
+        Member parent = parent(personaId);
         if (req.endDate().isBefore(req.startDate())) throw new GeneralException(ErrorStatus.INVALID_PERIOD);
 
-        Long familyId = parent.getFamily().getFamilyId();
-        Optional<Member> child = memberRepository.findByFamily_FamilyIdAndRole(familyId, Member.Role.CHILD);
-        long remaining = remainingRewardCap(familyId, child);
-        if (req.rewardAmount() > remaining) {
-            throw capExceeded(remaining);
-        }
-
+        Optional<Member> child = childOf(parent);
+        checkRewardCap(parent, child, req.rewardAmount());
         Mission mission = missionRepository.save(Mission.createByParent(parent.getFamily(), req));
+        notifyNewMission(child, mission);
 
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
+    /** 아이의 미션 제안: PROPOSED로 저장하고 부모에게 알린다 */
+    @Transactional
+    public MissionCreateResponse proposeMission(Long personaId, MissionProposalRequest req) {
+        Member child = memberRepository.getPersona(personaId);
+        if (child.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.CHILD_ONLY);
+        if (req.endDate().isBefore(req.startDate())) throw new GeneralException(ErrorStatus.INVALID_PERIOD);
+
+        Mission mission = missionRepository.save(Mission.createByChild(child.getFamily(), req));
+        memberRepository.findByFamily_FamilyIdAndRole(child.getFamily().getFamilyId(), Member.Role.PARENT)
+                .ifPresent(p -> notificationRepository.save(Notification.of(p, Notification.Type.MISSION_PROPOSED,
+                        "아이가 미션을 제안했어요", mission.getTitle(), mission.getMissionId(), demoNow())));
+
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
+    private Optional<Member> childOf(Member parent) {
+        return memberRepository.findByFamily_FamilyIdAndRole(parent.getFamily().getFamilyId(), Member.Role.CHILD);
+    }
+
+    private void checkRewardCap(Member parent, Optional<Member> child, int reward) {
+        long remaining = remainingRewardCap(parent.getFamily().getFamilyId(), child);
+        if (reward > remaining) throw capExceeded(remaining);
+    }
+
+    private void notifyNewMission(Optional<Member> child, Mission mission) {
         child.ifPresent(c -> notificationRepository.save(Notification.of(
                 c, Notification.Type.NEW_MISSION, "새 미션이 열렸어요", mission.getTitle(),
                 mission.getMissionId(), demoNow())));
-
-        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
     }
 
     /**
