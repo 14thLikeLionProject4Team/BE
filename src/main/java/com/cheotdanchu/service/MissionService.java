@@ -125,7 +125,7 @@ public class MissionService {
     @Transactional
     public MissionCreateResponse openMission(Long personaId, Long missionId, MissionCreateRequest req) {
         Member parent = parent(personaId);
-        Mission mission = familyMission(parent, missionId);
+        Mission mission = familyMissionForUpdate(parent, missionId);
         if (!mission.canOpen()) throw new GeneralException(ErrorStatus.MISSION_NOT_OPENABLE);
         if (req.endDate().isBefore(req.startDate())) throw new GeneralException(ErrorStatus.INVALID_PERIOD);
 
@@ -141,7 +141,7 @@ public class MissionService {
     @Transactional
     public MissionCreateResponse holdMission(Long personaId, Long missionId) {
         Member parent = parent(personaId);
-        Mission mission = familyMission(parent, missionId);
+        Mission mission = familyMissionForUpdate(parent, missionId);
         if (!mission.canHold()) throw new GeneralException(ErrorStatus.MISSION_NOT_HOLDABLE);
         mission.hold();
         return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
@@ -205,7 +205,7 @@ public class MissionService {
     public MissionSubmitResponse submitMission(Long personaId, Long missionId, List<MultipartFile> photos) {
         Member child = memberRepository.getPersona(personaId);
         if (child.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.CHILD_ONLY);
-        Mission mission = familyMission(child, missionId);
+        Mission mission = familyMissionForUpdate(child, missionId);
         if (!mission.canSubmit(seedRepository.today())) throw new GeneralException(ErrorStatus.MISSION_NOT_SUBMITTABLE);
 
         List<MultipartFile> files = photos == null ? List.of() : photos.stream().filter(f -> !f.isEmpty()).toList();
@@ -285,7 +285,7 @@ public class MissionService {
 
     /** 내 가족 미션의 제출. 다른 가족 것이면 404 */
     private MissionSubmission familySubmission(Member member, Long submissionId) {
-        return submissionRepository.findById(submissionId)
+        return submissionRepository.findByIdForUpdate(submissionId)
                 .filter(s -> s.getMission().getFamily().getFamilyId().equals(member.getFamily().getFamilyId()))
                 .orElseThrow(() -> new GeneralException(ErrorStatus.SUBMISSION_NOT_FOUND));
     }
@@ -400,6 +400,13 @@ public class MissionService {
     /** 내 가족의 미션. 다른 가족의 미션도 404: 존재 여부를 알려주지 않기 위해 */
     private Mission familyMission(Member member, Long missionId) {
         return missionRepository.findById(missionId)
+                .filter(found -> found.getFamily().getFamilyId().equals(member.getFamily().getFamilyId()))
+                .orElseThrow(() -> new GeneralException(ErrorStatus.MISSION_NOT_FOUND));
+    }
+
+    /** 상태를 바꿀 때 쓰는 잠근 조회 (열기·보류·제출). 동시에 온 같은 요청은 한 줄로 처리된다 */
+    private Mission familyMissionForUpdate(Member member, Long missionId) {
+        return missionRepository.findByIdForUpdate(missionId)
                 .filter(found -> found.getFamily().getFamilyId().equals(member.getFamily().getFamilyId()))
                 .orElseThrow(() -> new GeneralException(ErrorStatus.MISSION_NOT_FOUND));
     }
