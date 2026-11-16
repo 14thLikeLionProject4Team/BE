@@ -93,4 +93,24 @@ class MissionProposalApiTest {
                 .andExpect(status().isConflict());
     }
 
+    @Test
+    void 보류한_제안은_다시_보류할_수_없지만_열_수는_있다() throws Exception {
+        mockMvc.perform(patch("/missions/4/hold").header("X-Persona-Id", 1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ON_HOLD"));
+
+        mockMvc.perform(patch("/missions/4/hold").header("X-Persona-Id", 1))
+                .andExpect(status().isConflict());
+        mockMvc.perform(patch("/missions/4/open").header("X-Persona-Id", 1)
+                        .contentType(MediaType.APPLICATION_JSON).content(openBody(3000)))
+                .andExpect(jsonPath("$.data.status").value("NEW"));
+    }
+
+    @Test
+    void 자녀는_보류할_수_없고_다른_가족은_404() throws Exception {
+        mockMvc.perform(patch("/missions/4/hold").header("X-Persona-Id", 2))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/missions/4/hold").header("X-Persona-Id", 3))
+                .andExpect(status().isNotFound());
+    }
 }

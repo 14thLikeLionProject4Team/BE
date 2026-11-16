@@ -137,6 +137,16 @@ public class MissionService {
         return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
     }
 
+    /** 제안 보류 ("다음에"): PROPOSED → ON_HOLD */
+    @Transactional
+    public MissionCreateResponse holdMission(Long personaId, Long missionId) {
+        Member parent = parent(personaId);
+        Mission mission = familyMission(parent, missionId);
+        if (!mission.canHold()) throw new GeneralException(ErrorStatus.MISSION_NOT_HOLDABLE);
+        mission.hold();
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
     private Optional<Member> childOf(Member parent) {
         return memberRepository.findByFamily_FamilyIdAndRole(parent.getFamily().getFamilyId(), Member.Role.CHILD);
     }

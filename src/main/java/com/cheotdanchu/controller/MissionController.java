@@ -97,6 +97,14 @@ public class MissionController {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_OPENED, missionService.openMission(personaId, missionId, request));
     }
 
+    @Operation(summary = "제안 보류", description = "부모 전용. 아이가 제안한 미션을 보류(\"다음에\"). PROPOSED → ON_HOLD, 그 외 상태는 409.")
+    @PatchMapping("/missions/{missionId}/hold")
+    public ApiResponse<MissionCreateResponse> holdMission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long missionId) {
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_HELD, missionService.holdMission(personaId, missionId));
+    }
+
     @Operation(summary = "미션 완료 제출", description = "자녀 전용. multipart/form-data, photos(사진 인증 미션이면 1장 이상). NEW·IN_PROGRESS만 제출 가능, 제출하면 SUBMITTED.")
     @PostMapping(value = "/missions/{missionId}/submissions", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)

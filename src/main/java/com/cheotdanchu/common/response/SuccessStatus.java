@@ -17,6 +17,7 @@ public enum SuccessStatus {
     MISSION_CREATED(201, "미션을 열었어요. 아이에게 바로 알림이 가요."),
     MISSION_PROPOSED(201, "부모님께 미션을 제안했어요."),
     MISSION_OPENED(200, "미션을 열었어요. 아이에게 바로 알림이 가요."),
+    MISSION_HELD(200, "제안을 보류했어요."),
     MISSION_SUBMITTED(201, "완료를 제출했어요. 부모님 확인을 기다려요."),
     SUBMISSION_APPROVED(200, "보상을 보냈어요."),
     SUBMISSION_REJECTED(200, "아이에게 다시 부탁했어요."),

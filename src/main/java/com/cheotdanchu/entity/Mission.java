@@ -97,6 +97,15 @@ public class Mission {
         status = Status.NEW;
     }
 
+    public boolean canHold() {
+        return status == Status.PROPOSED;
+    }
+
+    /** 부모가 "다음에"를 누르면 보류. 아이 화면의 내가 제안한 미션에는 계속 보인다 */
+    public void hold() {
+        status = Status.ON_HOLD;
+    }
+
     private void fill(MissionCreateRequest req) {
         title = req.title();
         criteria = req.criteria();
