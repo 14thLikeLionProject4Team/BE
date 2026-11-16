@@ -3,6 +3,7 @@ package com.cheotdanchu.controller;
 import com.cheotdanchu.common.response.ApiResponse;
 import com.cheotdanchu.common.response.SuccessStatus;
 import com.cheotdanchu.dto.AllowanceChangeDtos;
+import com.cheotdanchu.dto.AllowanceSetupDtos;
 import com.cheotdanchu.dto.AllowanceSuggestionDtos;
 import com.cheotdanchu.entity.AllowanceSuggestion;
 import com.cheotdanchu.service.AllowanceSettingService;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,6 +52,15 @@ public class AllowanceController {
         return ApiResponse.onSuccess(SuccessStatus.ALLOWANCE_SUGGESTION_APPLIED,
                 String.format(Locale.KOREA, "%d월부터 용돈이 %,d원으로 바뀌어요.", result.effectiveFrom().getMonthValue(), result.amount()),
                 result);
+    }
+
+    @Operation(summary = "용돈 설정 화면 조회",
+            description = "부모 전용. 현재 월 용돈·보내는 날·자동이체·결제일과 바꾸는 이유 선택지, 대기 중인 AI 제안(배너)과 참고 구간. 대기 중인 제안이 없으면 pendingSuggestion 은 null, 참고 구간은 제안이 한 번도 없었을 때만 null. childId 는 선택(설정은 가족 단위).")
+    @GetMapping("/allowance/setup")
+    public ApiResponse<AllowanceSetupDtos.SetupResponse> getSetup(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @RequestParam(required = false) Long childId) {
+        return ApiResponse.onSuccess(SuccessStatus.ALLOWANCE_SETUP_OK, settingService.getSetup(personaId, childId));
     }
 
     @Operation(summary = "용돈 변경 저장",

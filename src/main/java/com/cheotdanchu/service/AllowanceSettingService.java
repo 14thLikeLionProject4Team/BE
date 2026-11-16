@@ -2,7 +2,10 @@ package com.cheotdanchu.service;
 
 import com.cheotdanchu.common.exception.GeneralException;
 import com.cheotdanchu.common.response.ErrorStatus;
+import com.cheotdanchu.ai.SeedRepository;
 import com.cheotdanchu.dto.AllowanceChangeDtos;
+import com.cheotdanchu.dto.AllowanceSetupDtos;
+import com.cheotdanchu.dto.AllowanceSuggestionDtos;
 import com.cheotdanchu.entity.AllowanceChange;
 import com.cheotdanchu.entity.AllowanceSuggestion;
 import com.cheotdanchu.entity.FamilySetting;
@@ -15,6 +18,8 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +29,43 @@ public class AllowanceSettingService {
     private final FamilySettingRepository familySettingRepository;
     private final AllowanceSuggestionService suggestionService;
     private final AllowanceChangeService allowanceChangeService;
+    private final SeedRepository seedRepository;
+
+    /** 용돈 정하기 화면에서 고를 수 있는 이유. 처음(INITIAL)은 시작할 때 시스템이 남기는 값이라 뺀다 */
+    private static final List<AllowanceSetupDtos.ReasonOption> REASON_OPTIONS = Arrays.stream(AllowanceChange.Reason.values())
+            .filter(r -> r != AllowanceChange.Reason.INITIAL)
+            .map(r -> new AllowanceSetupDtos.ReasonOption(r, r.getLabel()))
+            .toList();
+
+    /**
+     * 용돈 정하기 화면에 필요한 현재 값과 대기 중인 AI 제안을 한 번에 내려준다.
+     * 참고 구간은 AI 제안과 같은 계산이라, 가장 최근 제안(처리한 것 포함)의 구간을 쓴다. 제안이 한 번도 없으면 null.
+     * childId 는 선택이고(설정은 가족 단위), 주면 우리 가족의 아이인지만 확인한다.
+     */
+    @Transactional(readOnly = true)
+    public AllowanceSetupDtos.SetupResponse getSetup(Long personaId, Long childId) {
+        Member parent = parent(personaId);
+        Long familyId = parent.getFamily().getFamilyId();
+        if (childId != null) {
+            memberRepository.findById(childId)
+                    .filter(m -> m.getRole() == Member.Role.CHILD && m.getFamily().getFamilyId().equals(familyId))
+                    .orElseThrow(() -> new GeneralException(ErrorStatus.PERSONA_NOT_FOUND));
+        }
+
+        FamilySetting setting = familySettingRepository.findById(familyId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.FAMILY_SETTING_NOT_FOUND));
+        Integer currentAmount = allowanceChangeService.amountOn(familyId, seedRepository.today()).orElse(null);
+        AllowanceSuggestionDtos.SuggestionResponse suggestion = suggestionService.getPending(parent);
+        AllowanceSetupDtos.ReferenceRange range = suggestionService.latest(familyId)
+                .map(s -> new AllowanceSetupDtos.ReferenceRange(s.getRangeMin(), s.getRangeMax()))
+                .orElse(null);
+
+        return new AllowanceSetupDtos.SetupResponse(
+                currentAmount, setting.getAllowanceDay(), setting.isAutoTransfer(), setting.getSettlementDay(), range,
+                suggestion == null ? null : new AllowanceSetupDtos.PendingSuggestion(
+                        suggestion.suggestionId(), suggestion.suggestedAmount(), suggestion.explanation()),
+                REASON_OPTIONS);
+    }
 
     /**
      * 보내는 날·자동이체·결제일을 저장하고, 금액이 바뀌면 다음 달 1일부터 적용되는 이력을 남기고 아이에게 알린다.
@@ -34,8 +76,7 @@ public class AllowanceSettingService {
     // 잠금을 기다리다 풀린 뒤에는 앞 요청이 저장한 이력이 보여야 해서 READ_COMMITTED 로 읽는다 (기본값은 트랜잭션 처음 읽은 시점의 모습만 본다)
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public AllowanceChangeDtos.SaveResponse save(Long personaId, AllowanceChangeDtos.SaveRequest request) {
-        Member parent = memberRepository.getPersona(personaId);
-        if (parent.getRole() != Member.Role.PARENT) throw new GeneralException(ErrorStatus.PARENT_ONLY);
+        Member parent = parent(personaId);
         if (request.reason() == AllowanceChange.Reason.INITIAL) throw new GeneralException(ErrorStatus.INVALID_INPUT);
         Long familyId = parent.getFamily().getFamilyId();
 
@@ -67,5 +108,11 @@ public class AllowanceSettingService {
         }
         return new AllowanceChangeDtos.SaveResponse(
                 change.getChangeId(), change.getPrevAmount(), change.getAmount(), change.getEffectiveFrom(), true);
+    }
+
+    private Member parent(Long personaId) {
+        Member member = memberRepository.getPersona(personaId);
+        if (member.getRole() != Member.Role.PARENT) throw new GeneralException(ErrorStatus.PARENT_ONLY);
+        return member;
     }
 }

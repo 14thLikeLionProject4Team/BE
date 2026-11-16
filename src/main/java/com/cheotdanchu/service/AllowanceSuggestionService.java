@@ -18,6 +18,7 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -31,13 +32,22 @@ public class AllowanceSuggestionService {
 
     /** 대기 중인 제안이 없으면 null (에러가 아니라 "제안 없음"). 제안을 만든 뒤 용돈이 바뀌어 오래된 제안도 보여주지 않는다 */
     public AllowanceSuggestionDtos.SuggestionResponse getPending(Long personaId) {
-        Member parent = parent(personaId);
+        return getPending(parent(personaId));
+    }
+
+    /** 이미 확인한 부모로 조회한다 (다른 서비스가 부모를 읽은 뒤 이어서 쓸 때) */
+    public AllowanceSuggestionDtos.SuggestionResponse getPending(Member parent) {
         Long familyId = parent.getFamily().getFamilyId();
         return suggestionRepository
                 .findFirstByFamilyIdAndStatusOrderByCreatedAtDesc(familyId, AllowanceSuggestion.Status.PENDING)
                 .filter(s -> !isOutdated(s, familyId))
                 .map(this::toResponse)
                 .orElse(null);
+    }
+
+    /** 가장 최근 제안 (처리한 것 포함). 용돈 정하기 화면의 참고 구간은 제안을 처리한 뒤에도 남아 있어야 해서 이것을 쓴다 */
+    public Optional<AllowanceSuggestion> latest(Long familyId) {
+        return suggestionRepository.findFirstByFamilyIdOrderByCreatedAtDesc(familyId);
     }
 
     /**
