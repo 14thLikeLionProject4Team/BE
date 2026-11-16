@@ -16,6 +16,7 @@ import com.cheotdanchu.repository.MemberRepository;
 import com.cheotdanchu.repository.NotificationRepository;
 import com.cheotdanchu.repository.SettlementRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -83,8 +84,8 @@ public class ParentHomeService {
                     "AI 용돈 제안"));
         }
 
-        for (ChildMessage m : childMessageRepository.findByFamilyIdAndStatusOrderByChildMessageIdAsc(
-                parent.getFamily().getFamilyId(), ChildMessage.Status.SENT)) {
+        for (ChildMessage m : childMessageRepository.findByFamilyIdAndStatus(
+                parent.getFamily().getFamilyId(), ChildMessage.Status.SENT, Sort.by("sentAt", "childMessageId"))) {
             cards.add(new ParentHomeDtos.DecisionCard(ParentHomeDtos.CardType.CHILD_MESSAGE, m.getChildMessageId(),
                     m.getRequest(), m.getReason(),
                     m.getDelivery() == ChildMessage.Delivery.MONTHLY ? "월말 회고에서 전한 말" : "아이가 전한 말"));

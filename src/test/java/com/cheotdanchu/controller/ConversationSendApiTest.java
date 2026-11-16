@@ -124,4 +124,14 @@ class ConversationSendApiTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.message").value("지금은 답변하기 어려워요. 잠시 후 다시 물어봐 주세요."));
     }
+
+    @Test
+    void 기존_api_ai_chat은_LLM이_답하지_않아도_200으로_금융지식_처리한다() throws Exception {
+        when(llm.chatJson(anyString(), anyString())).thenReturn(null);
+
+        mockMvc.perform(post("/api/ai/chat").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"personaId\":\"2\",\"childName\":\"루피\",\"message\":\"청구 예정액이 뭐야?\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.kind").value("금융지식"));
+    }
 }

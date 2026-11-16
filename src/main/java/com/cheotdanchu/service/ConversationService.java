@@ -20,6 +20,7 @@ import com.cheotdanchu.repository.MemberRepository;
 import com.cheotdanchu.repository.SettlementRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -136,7 +137,7 @@ public class ConversationService {
         Long familyId = child.getFamily().getFamilyId();
         return latestSettlement(familyId)
                 .map(s -> new ConversationDtos.RetrospectResponse(true, s.getSettlementId(), RETROSPECT_QUESTIONS,
-                        childMessageRepository.findByFamilyIdAndStatusOrderByChildMessageIdAsc(familyId, ChildMessage.Status.MONTHLY)
+                        childMessageRepository.findByFamilyIdAndStatus(familyId, ChildMessage.Status.MONTHLY, Sort.by("childMessageId"))
                                 .stream().map(ConversationDtos.PendingMessage::of).toList()))
                 .orElse(new ConversationDtos.RetrospectResponse(false, null, List.of(), List.of()));
     }
@@ -192,7 +193,7 @@ public class ConversationService {
 
         LocalDateTime now = demoNow();
         ChatMessage asked = chatMessageRepository.save(ChatMessage.fromChild(child.getMemberId(), text, now));
-        AiDtos.ChatResponse answer = chatFlowService.chat(String.valueOf(child.getMemberId()), child.getName(), text);
+        AiDtos.ChatResponse answer = chatFlowService.chat(String.valueOf(child.getMemberId()), child.getName(), text, true);
 
         ChatMessage reply = chatMessageRepository.save(
                 ChatMessage.fromBot(child.getMemberId(), answer.answer(), cardType(answer), payload(answer), now));

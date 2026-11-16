@@ -46,6 +46,18 @@ class ParentDecisionsApiTest {
     }
 
     @Test
+    void 전한_말은_만든_순서가_아니라_전한_순서로_나온다() throws Exception {
+        // 먼저 만들었지만(아이디가 작음) 월말 회고에서 늦게 전한 말, 나중에 만들었지만 일찍 전한 말
+        jdbc.update("INSERT INTO child_messages (family_id, request, status, delivery, created_at, sent_at) VALUES (1, '늦게 전한 말', 'SENT', 'MONTHLY', '2026-09-10 10:00:00', '2026-10-18 22:00:00')");
+        jdbc.update("INSERT INTO child_messages (family_id, request, status, delivery, created_at, sent_at) VALUES (1, '일찍 전한 말', 'SENT', 'NOW', '2026-10-05 10:00:00', '2026-10-05 10:00:00')");
+
+        mockMvc.perform(get("/parent/decisions").header("X-Persona-Id", 1))
+                .andExpect(jsonPath("$.data.cards[1].title").value("일찍 전한 말"))
+                .andExpect(jsonPath("$.data.cards[2].title").value("다음 달 친구 생일 선물비가 조금 더 필요해요"))
+                .andExpect(jsonPath("$.data.cards[3].title").value("늦게 전한 말"));
+    }
+
+    @Test
     void 처리할_게_없으면_빈_배열() throws Exception {
         jdbc.update("UPDATE allowance_suggestions SET status = 'KEPT'");
         jdbc.update("UPDATE mission_submissions SET review_status = 'APPROVED' WHERE review_status = 'PENDING'");

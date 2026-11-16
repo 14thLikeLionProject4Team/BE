@@ -53,7 +53,13 @@ public class ChatFlowService {
 
     // ───────────────────────── 대화 한 번 ─────────────────────────
 
+    /** /api/ai/chat: LLM이 답하지 않으면 예전처럼 금융지식으로 처리한다 */
     public AiDtos.ChatResponse chat(String personaId, String childName, String message) {
+        return chat(personaId, childName, message, false);
+    }
+
+    /** failIfLlmDown이 true면 분류 단계에서 LLM이 답하지 않을 때 AI_UNAVAILABLE(503)을 던진다 */
+    public AiDtos.ChatResponse chat(String personaId, String childName, String message, boolean failIfLlmDown) {
         if (message == null || message.isBlank()) {
             return simple("범위밖", "메시지를 입력해 주세요.");
         }
@@ -62,6 +68,10 @@ public class ChatFlowService {
             return new AiDtos.ChatResponse("고민", AnswerGuard.CRISIS_REPLY, List.of(), List.of(), List.of(), true, null);
         }
         String kind = classify(message);
+        if (kind == null) {
+            if (failIfLlmDown) throw new GeneralException(ErrorStatus.AI_UNAVAILABLE);
+            kind = "금융지식";
+        }
         return switch (kind) {
             case "금융지식" -> answerFinance(message);
             case "고민" -> worryChat(personaId, childName, message);
@@ -70,10 +80,10 @@ public class ChatFlowService {
         };
     }
 
+    /** 다시 시도해도 LLM이 답하지 않으면(연결 오류·키 없음) null. 처리는 호출한 쪽이 정한다 */
     String classify(String message) {
         Map<String, Object> res = llm.chatJson(prompts.build("classify"), message);
-        // 다시 시도해도 LLM이 답하지 않으면(연결 오류·키 없음) 대체 문장 대신 잠시 후 다시 물어보게 한다
-        if (res == null) throw new GeneralException(ErrorStatus.AI_UNAVAILABLE);
+        if (res == null) return null;
         Object kind = res.get("kind");
         if (kind == null || !KINDS.contains(kind.toString())) {
             log.warn("분류 실패 → 금융지식으로 처리: {}", res);

@@ -96,7 +96,7 @@ class RetrospectApiTest {
         assertEquals("DISCARDED", jdbc.queryForObject("SELECT status FROM child_messages WHERE child_message_id = ?", String.class, seeded));
 
         mockMvc.perform(get("/parent/decisions").header("X-Persona-Id", 1))
-                .andExpect(jsonPath("$.data.cards[?(@.refId == " + chosen + ")].label").value("월말 회고에서 전한 말"));
+                .andExpect(jsonPath("$.data.cards[?(@.type == 'CHILD_MESSAGE' && @.refId == " + chosen + ")].label").value("월말 회고에서 전한 말"));
         mockMvc.perform(get("/retrospects/current").header("X-Persona-Id", 2))
                 .andExpect(jsonPath("$.data.pendingMessages.length()").value(0));
     }
