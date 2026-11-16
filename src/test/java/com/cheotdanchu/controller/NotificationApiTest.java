@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -54,5 +55,25 @@ class NotificationApiTest {
         mockMvc.perform(get("/notifications").param("cursor", cursor.toString()).header("X-Persona-Id", 1))
                 .andExpect(jsonPath("$.data.notifications.length()").value(3))
                 .andExpect(jsonPath("$.data.nextCursor").value(nullValue()));
+    }
+
+    @Test
+    void 내_알림을_읽음_처리하면_읽음으로_보이고_다시_해도_성공한다() throws Exception {
+        Long id = jdbc.queryForObject("SELECT notification_id FROM notifications WHERE member_id = 1 AND type = 'MISSION_REMIND'", Long.class);
+
+        for (int i = 0; i < 2; i++) {
+            mockMvc.perform(patch("/notifications/" + id + "/read").header("X-Persona-Id", 1))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message").value("알림을 읽음 처리했어요."));
+        }
+        mockMvc.perform(get("/notifications").header("X-Persona-Id", 1))
+                .andExpect(jsonPath("$.data.notifications[0].isRead").value(true));
+    }
+
+    @Test
+    void 다른_사람_알림은_404() throws Exception {
+        Long id = jdbc.queryForObject("SELECT notification_id FROM notifications WHERE member_id = 1 AND type = 'MISSION_REMIND'", Long.class);
+        mockMvc.perform(patch("/notifications/" + id + "/read").header("X-Persona-Id", 2))
+                .andExpect(status().isNotFound());
     }
 }

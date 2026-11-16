@@ -7,6 +7,8 @@ import com.cheotdanchu.service.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,5 +25,14 @@ public class NotificationController {
             @RequestHeader("X-Persona-Id") Long personaId,
             @RequestParam(required = false) Long cursor) {
         return ApiResponse.onSuccess(SuccessStatus.NOTIFICATION_LIST_OK, notificationService.getNotifications(personaId, cursor));
+    }
+
+    @Operation(summary = "알림 읽음 처리", description = "본인 알림만. 다른 사람 알림은 404. 이미 읽은 알림도 200.")
+    @PatchMapping("/notifications/{notificationId}/read")
+    public ApiResponse<Void> markRead(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long notificationId) {
+        notificationService.markRead(personaId, notificationId);
+        return ApiResponse.onSuccess(SuccessStatus.NOTIFICATION_READ, null);
     }
 }
