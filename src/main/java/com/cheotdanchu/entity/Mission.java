@@ -124,6 +124,18 @@ public class Mission {
         if (endDate != null) this.endDate = endDate;
     }
 
+    /**
+     * 새 미션·진행 중인 미션만 취소할 수 있다. 확인 대기(SUBMITTED)는 아이가 낸 제출이 확인 대기 목록에 남아 있어서
+     * 먼저 승인·반려해야 한다. 취소한 미션은 지우지 않고 CANCELED로 남겨 종료 미션 목록에 보인다
+     */
+    public boolean canCancel() {
+        return status == Status.NEW || status == Status.IN_PROGRESS;
+    }
+
+    public void cancel() {
+        status = Status.CANCELED;
+    }
+
     private void fill(MissionCreateRequest req) {
         title = req.title();
         criteria = req.criteria();

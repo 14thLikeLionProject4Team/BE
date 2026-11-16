@@ -185,6 +185,20 @@ public class MissionService {
         return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
     }
 
+    /** 미션 취소 (소프트 삭제 → CANCELED). 확인 대기 중이면 제출을 먼저 처리해야 하고, 끝난 미션은 409 */
+    @Transactional
+    public MissionCreateResponse cancelMission(Long personaId, Long missionId) {
+        Member parent = parent(personaId);
+        Mission mission = familyMissionForUpdate(parent, missionId);
+        if (mission.isNotOpenedYet()) throw new GeneralException(ErrorStatus.MISSION_NOT_CANCELABLE, NOT_OPENED_YET);
+        if (mission.getStatus() == Mission.Status.SUBMITTED) {
+            throw new GeneralException(ErrorStatus.MISSION_NOT_CANCELABLE, "아이가 낸 완료를 먼저 확인해 주세요.");
+        }
+        if (!mission.canCancel()) throw new GeneralException(ErrorStatus.MISSION_NOT_CANCELABLE);
+        mission.cancel();
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
     private Optional<Member> childOf(Member parent) {
         return memberRepository.findByFamily_FamilyIdAndRole(parent.getFamily().getFamilyId(), Member.Role.CHILD);
     }

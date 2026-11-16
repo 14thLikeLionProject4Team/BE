@@ -18,6 +18,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -143,6 +144,14 @@ public class MissionController {
             @PathVariable Long missionId,
             @Valid @RequestBody MissionUpdateRequest request) {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_UPDATED, missionService.updateMission(personaId, missionId, request));
+    }
+
+    @Operation(summary = "미션 취소", description = "부모 전용. 지우지 않고 CANCELED로 바꾸며 종료 미션 목록에 남는다. 새 미션·진행 중인 미션만 가능하고, 확인 대기(SUBMITTED)는 제출을 먼저 승인·반려해야 한다. 그 외 상태는 409.")
+    @DeleteMapping("/missions/{missionId}")
+    public ApiResponse<MissionCreateResponse> cancelMission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long missionId) {
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_CANCELED, missionService.cancelMission(personaId, missionId));
     }
 
     @Operation(summary = "미션 상세 조회", description = "미션 한 건의 상세와 제출 이력(최신순, 사진 포함). 자녀·부모 공용. 다른 가족의 미션은 404.")
