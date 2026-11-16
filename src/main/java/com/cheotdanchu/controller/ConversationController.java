@@ -60,6 +60,17 @@ public class ConversationController {
         return ApiResponse.onSuccess(SuccessStatus.RETROSPECT_OK, conversationService.getRetrospect(personaId));
     }
 
+    @Operation(summary = "월말 회고 승인", description = "자녀 전용. 월말 회고에서 고른 전할 말은 SENT(delivery=MONTHLY)가 되어 부모 결정 카드에 뜨고, 고르지 않은 말은 DISCARDED. approvedIds를 비우면 모두 버린다. 끝난 정산이 없으면 409, 월말에 전하기로 한 말이 아닌 ID는 400.")
+    @PostMapping("/retrospects/current/approve")
+    public ApiResponse<ConversationDtos.ApproveResponse> approveRetrospect(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @RequestBody ConversationDtos.ApproveRequest request) {
+        ConversationDtos.ApproveResponse result = conversationService.approveRetrospect(personaId, request.approvedIds());
+        return result.sentCount() > 0
+                ? ApiResponse.onSuccess(SuccessStatus.RETROSPECT_APPROVED, result)
+                : ApiResponse.onSuccess(SuccessStatus.RETROSPECT_APPROVED, "이번 달은 전하지 않았어요.", result);
+    }
+
     @Operation(summary = "메시지 전송", description = "자녀 전용. 메시지를 보내고 첫단추 답을 받는다. cardType: TEXT(일반·고민), RAG(금융 설명, payload.inScope·sources), NUMBER(내 숫자). 고민 대화에서 부모님께 바라는 게 나오면 childMessage에 전할 말 후보(CANDIDATE). 빈 메시지 400, LLM 호출 실패 503.")
     @PostMapping("/conversations/messages")
     @ResponseStatus(HttpStatus.CREATED)

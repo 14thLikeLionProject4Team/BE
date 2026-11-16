@@ -17,9 +17,11 @@ public interface ChildMessageRepository extends JpaRepository<ChildMessage, Long
     @Query("select m from ChildMessage m where m.childMessageId = :id")
     Optional<ChildMessage> findByIdForUpdate(@Param("id") Long id);
 
-    /** 부모 결정 카드: 아직 답하지 않은 전해진 말, 먼저 전한 순 */
-    List<ChildMessage> findByFamilyIdAndStatusOrderBySentAtAscChildMessageIdAsc(Long familyId, ChildMessage.Status status);
+    /** 가족의 특정 상태 말을 먼저 만든 순으로 (결정 카드는 SENT, 월말 회고는 MONTHLY) */
+    List<ChildMessage> findByFamilyIdAndStatusOrderByChildMessageIdAsc(Long familyId, ChildMessage.Status status);
 
-    /** 월말 회고: 월말에 전하기로 한 말, 먼저 만든 순 */
-    List<ChildMessage> findByFamilyIdAndStatusOrderByCreatedAtAscChildMessageIdAsc(Long familyId, ChildMessage.Status status);
+    /** 월말 회고 승인: 같은 회고를 두 번 보내도 한 번만 처리되도록 잠그고 읽는다 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from ChildMessage m where m.familyId = :familyId and m.status = :status")
+    List<ChildMessage> findByFamilyIdAndStatusForUpdate(@Param("familyId") Long familyId, @Param("status") ChildMessage.Status status);
 }

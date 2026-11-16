@@ -83,7 +83,7 @@ public class ParentHomeService {
                     "AI 용돈 제안"));
         }
 
-        for (ChildMessage m : childMessageRepository.findByFamilyIdAndStatusOrderBySentAtAscChildMessageIdAsc(
+        for (ChildMessage m : childMessageRepository.findByFamilyIdAndStatusOrderByChildMessageIdAsc(
                 parent.getFamily().getFamilyId(), ChildMessage.Status.SENT)) {
             cards.add(new ParentHomeDtos.DecisionCard(ParentHomeDtos.CardType.CHILD_MESSAGE, m.getChildMessageId(),
                     m.getRequest(), m.getReason(),

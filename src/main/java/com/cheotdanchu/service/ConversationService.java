@@ -28,10 +28,13 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -133,9 +136,29 @@ public class ConversationService {
         Long familyId = child.getFamily().getFamilyId();
         return latestSettlement(familyId)
                 .map(s -> new ConversationDtos.RetrospectResponse(true, s.getSettlementId(), RETROSPECT_QUESTIONS,
-                        childMessageRepository.findByFamilyIdAndStatusOrderByCreatedAtAscChildMessageIdAsc(familyId, ChildMessage.Status.MONTHLY)
+                        childMessageRepository.findByFamilyIdAndStatusOrderByChildMessageIdAsc(familyId, ChildMessage.Status.MONTHLY)
                                 .stream().map(ConversationDtos.PendingMessage::of).toList()))
                 .orElse(new ConversationDtos.RetrospectResponse(false, null, List.of(), List.of()));
+    }
+
+    /**
+     * 월말 회고에서 고른 전할 말을 부모님께 보낸다(SENT, delivery=MONTHLY). 고르지 않은 MONTHLY 말은 버린다(DISCARDED).
+     * 끝난 정산이 없으면 409, 월말에 전하기로 한 말이 아닌 ID가 섞여 있으면 400.
+     */
+    @Transactional
+    public ConversationDtos.ApproveResponse approveRetrospect(Long personaId, List<Long> approvedIds) {
+        Member child = child(personaId);
+        Long familyId = child.getFamily().getFamilyId();
+        if (latestSettlement(familyId).isEmpty()) throw new GeneralException(ErrorStatus.RETROSPECT_NOT_AVAILABLE);
+
+        Set<Long> approved = approvedIds == null ? Set.of() : new HashSet<>(approvedIds);
+        List<ChildMessage> pending = childMessageRepository.findByFamilyIdAndStatusForUpdate(familyId, ChildMessage.Status.MONTHLY);
+        Set<Long> pendingIds = pending.stream().map(ChildMessage::getChildMessageId).collect(Collectors.toSet());
+        if (!pendingIds.containsAll(approved)) throw new GeneralException(ErrorStatus.INVALID_INPUT, "월말에 전하기로 한 말만 고를 수 있어요.");
+
+        LocalDateTime now = demoNow();
+        pending.forEach(m -> m.closeMonthly(approved.contains(m.getChildMessageId()), now));
+        return new ConversationDtos.ApproveResponse(approved.size(), pending.size() - approved.size());
     }
 
     /** 가장 최근에 끝난 정산 (제외된 정산은 빼고) */

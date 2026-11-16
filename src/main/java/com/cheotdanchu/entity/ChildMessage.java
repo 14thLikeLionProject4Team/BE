@@ -97,6 +97,12 @@ public class ChildMessage {
         decidedAt = at;
     }
 
+    /** 월말 회고에서 아이가 고른 말은 부모에게 가고(SENT, delivery=MONTHLY), 고르지 않은 말은 버린다 */
+    public void closeMonthly(boolean approved, LocalDateTime at) {
+        if (approved) send(Delivery.MONTHLY, at);
+        else status = Status.DISCARDED;
+    }
+
     private void send(Delivery how, LocalDateTime at) {
         status = Status.SENT;
         delivery = how;

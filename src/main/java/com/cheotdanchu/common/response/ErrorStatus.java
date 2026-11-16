@@ -35,6 +35,7 @@ public enum ErrorStatus {
     ACCOUNT_NOT_FOUND(404, "연결된 계좌를 찾을 수 없습니다"),
     CHILD_MESSAGE_NOT_FOUND(404, "전할 말을 찾을 수 없습니다"),
     INVALID_STATUS_TRANSITION(409, "지금은 이 상태로 바꿀 수 없어요."),
+    RETROSPECT_NOT_AVAILABLE(409, "결제일 정산이 끝난 뒤에 회고할 수 있어요."),
     AI_UNAVAILABLE(503, "지금은 답변하기 어려워요. 잠시 후 다시 물어봐 주세요.");
 
     private final int code;

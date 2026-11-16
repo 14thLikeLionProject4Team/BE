@@ -25,6 +25,11 @@ public final class ConversationDtos {
     /** available=false(정산 전)면 settlementId null, questions·pendingMessages 빈 배열 */
     public record RetrospectResponse(boolean available, Long settlementId, List<String> questions, List<PendingMessage> pendingMessages) {}
 
+    /** 월말 회고에서 부모님께 보낼 전할 말 ID. 비우면 모두 버린다 */
+    public record ApproveRequest(List<Long> approvedIds) {}
+
+    public record ApproveResponse(int sentCount, int discardedCount) {}
+
     public record PendingMessage(Long childMessageId, String request, String reason) {
         public static PendingMessage of(ChildMessage m) {
             return new PendingMessage(m.getChildMessageId(), m.getRequest(), m.getReason());
