@@ -101,6 +101,18 @@ public class Mission {
         status = Status.NEW;
     }
 
+    /** 자녀 화면 추천(RECOMMENDED, recommend_to = CHILD)만 아이가 부모에게 제안할 수 있다 */
+    public boolean canProposeRecommendation() {
+        return status == Status.RECOMMENDED && recommendTo == RecommendTo.CHILD;
+    }
+
+    /** 추천 보상은 아이가 바라는 보상으로 넘기고, 부모가 금액을 정해서 열 때까지 보상은 비워 둔다 (아이가 만든 제안과 같은 모양) */
+    public void proposeRecommendation() {
+        desiredReward = rewardAmount;
+        rewardAmount = null;
+        status = Status.PROPOSED;
+    }
+
     public boolean canHold() {
         return status == Status.PROPOSED;
     }

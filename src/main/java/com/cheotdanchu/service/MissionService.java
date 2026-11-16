@@ -118,11 +118,26 @@ public class MissionService {
         if (req.endDate().isBefore(req.startDate())) throw new GeneralException(ErrorStatus.INVALID_PERIOD);
 
         Mission mission = missionRepository.save(Mission.createByChild(child.getFamily(), req));
+        notifyProposed(child, mission);
+
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
+    /** 자녀 화면 추천 미션을 아이가 부모에게 제안한다: RECOMMENDED → PROPOSED, 부모에게 알림. 그 외 미션은 409 */
+    @Transactional
+    public MissionCreateResponse proposeRecommendation(Long personaId, Long missionId) {
+        Member child = child(personaId);
+        Mission mission = familyMissionForUpdate(child, missionId);
+        if (!mission.canProposeRecommendation()) throw new GeneralException(ErrorStatus.MISSION_NOT_PROPOSABLE);
+        mission.proposeRecommendation();
+        notifyProposed(child, mission);
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
+    private void notifyProposed(Member child, Mission mission) {
         memberRepository.findByFamily_FamilyIdAndRole(child.getFamily().getFamilyId(), Member.Role.PARENT)
                 .ifPresent(p -> notificationRepository.save(Notification.of(p, Notification.Type.MISSION_PROPOSED,
                         "아이가 미션을 제안했어요", mission.getTitle(), mission.getMissionId(), demoNow())));
-
-        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
     }
 
     /** 제안·보류·추천 미션을 부모가 금액을 정해서 연다. 새로 만드는 것과 같은 검사(기간·한도)를 하고 아이에게 알린다 */

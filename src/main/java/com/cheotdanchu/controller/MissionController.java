@@ -91,6 +91,14 @@ public class MissionController {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_PROPOSED, missionService.proposeMission(personaId, request));
     }
 
+    @Operation(summary = "추천 미션 제안", description = "자녀 전용. 자녀 화면 추천 미션(RECOMMENDED, recommend_to = CHILD)을 부모에게 제안한다 → PROPOSED, 추천 보상은 desiredReward로 넘어가고 부모에게 MISSION_PROPOSED 알림. 그 외 미션은 409.")
+    @PostMapping("/missions/{missionId}/propose")
+    public ApiResponse<MissionCreateResponse> proposeRecommendation(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long missionId) {
+        return ApiResponse.onSuccess(SuccessStatus.RECOMMENDATION_PROPOSED, missionService.proposeRecommendation(personaId, missionId));
+    }
+
     @Operation(summary = "제안·추천 미션 오픈", description = "부모 전용. 제안(PROPOSED·ON_HOLD)·추천(RECOMMENDED) 미션을 미션 생성과 같은 필드로 채워 엽니다 → NEW, 자녀 알림. 그 외 상태는 409, 남은 한도 초과는 422.")
     @PatchMapping("/missions/{missionId}/open")
     public ApiResponse<MissionCreateResponse> openMission(
