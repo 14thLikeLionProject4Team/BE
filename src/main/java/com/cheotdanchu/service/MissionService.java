@@ -110,8 +110,7 @@ public class MissionService {
     /** 아이의 미션 제안: PROPOSED로 저장하고 부모에게 알린다 */
     @Transactional
     public MissionCreateResponse proposeMission(Long personaId, MissionProposalRequest req) {
-        Member child = memberRepository.getPersona(personaId);
-        if (child.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.CHILD_ONLY);
+        Member child = child(personaId);
         if (req.endDate().isBefore(req.startDate())) throw new GeneralException(ErrorStatus.INVALID_PERIOD);
 
         Mission mission = missionRepository.save(Mission.createByChild(child.getFamily(), req));
@@ -204,8 +203,7 @@ public class MissionService {
 
     @Transactional
     public MissionSubmitResponse submitMission(Long personaId, Long missionId, List<MultipartFile> photos) {
-        Member child = memberRepository.getPersona(personaId);
-        if (child.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.CHILD_ONLY);
+        Member child = child(personaId);
         Mission mission = familyMissionForUpdate(child, missionId);
         if (!mission.canSubmit(seedRepository.today())) throw new GeneralException(ErrorStatus.MISSION_NOT_SUBMITTABLE);
 
@@ -234,10 +232,8 @@ public class MissionService {
 
         Mission mission = submission.getMission();
         int reward = mission.getRewardAmount() == null ? 0 : mission.getRewardAmount();
-        Long familyId = parent.getFamily().getFamilyId();
-        Optional<Member> child = memberRepository.findByFamily_FamilyIdAndRole(familyId, Member.Role.CHILD);
-        long remaining = remainingRewardCap(familyId, child);
-        if (reward > remaining) throw capExceeded(remaining);
+        Optional<Member> child = childOf(parent);
+        checkRewardCap(parent, child, reward);
 
         Account childAccount = child.flatMap(c -> accountRepository.findByMemberId(c.getMemberId()))
                 .orElseThrow(() -> new GeneralException(ErrorStatus.ACCOUNT_NOT_FOUND));
@@ -276,6 +272,12 @@ public class MissionService {
 
         return new SubmissionReviewDtos.RejectResponse(submission.getSubmissionId(), submission.getReviewStatus(),
                 submission.getRejectReason(), mission.getStatus());
+    }
+
+    private Member child(Long personaId) {
+        Member member = memberRepository.getPersona(personaId);
+        if (member.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.CHILD_ONLY);
+        return member;
     }
 
     private Member parent(Long personaId) {
