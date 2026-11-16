@@ -32,9 +32,7 @@ class MissionQueryApiTest {
     }
 
     @Test
-    void 부모는_결정하지_않은_제안만_보고_자녀는_보류된_제안도_본다() throws Exception {
-        insertMission("보류된 제안", "ON_HOLD");
-
+    void 제안_목록은_자녀와_부모_모두_보류된_제안까지_본다() throws Exception {
         mockMvc.perform(get("/missions").param("status", "PROPOSED").header("X-Persona-Id", 1))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("제안 미션 목록 조회 성공"))
@@ -43,8 +41,12 @@ class MissionQueryApiTest {
                 .andExpect(jsonPath("$.data.missions[0].desiredReward").value(3000))
                 .andExpect(jsonPath("$.data.missions[0].criteria").value("일주일에 한 번 베란다 화분에 물 주기"));
 
-        mockMvc.perform(get("/missions").param("status", "PROPOSED").header("X-Persona-Id", 2))
-                .andExpect(jsonPath("$.data.count").value(2));
+        insertMission("보류된 제안", "ON_HOLD");
+        for (long persona : new long[]{1, 2}) {
+            mockMvc.perform(get("/missions").param("status", "PROPOSED").header("X-Persona-Id", persona))
+                    .andExpect(jsonPath("$.data.count").value(2))
+                    .andExpect(jsonPath("$.data.missions[?(@.status == 'ON_HOLD')]").exists());
+        }
     }
 
     @Test

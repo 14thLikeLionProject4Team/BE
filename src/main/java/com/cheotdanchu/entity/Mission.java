@@ -1,6 +1,7 @@
 package com.cheotdanchu.entity;
 
 import com.cheotdanchu.dto.MissionCreateRequest;
+import com.cheotdanchu.dto.MissionProposalRequest;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -62,17 +63,58 @@ public class Mission {
     public static Mission createByParent(Family family, MissionCreateRequest req) {
         Mission m = new Mission();
         m.family = family;
+        m.fill(req);
+        m.origin = Origin.PARENT;
+        m.status = Status.NEW;
+        return m;
+    }
+
+    /** 아이가 제안한 미션은 부모가 금액을 정해서 열기 전까지 PROPOSED. 보상은 아직 없고 바라는 보상만 남긴다 */
+    public static Mission createByChild(Family family, MissionProposalRequest req) {
+        Mission m = new Mission();
+        m.family = family;
         m.title = req.title();
         m.criteria = req.criteria();
         m.missionType = req.missionType();
-        m.rewardAmount = req.rewardAmount();
+        m.desiredReward = req.desiredReward();
         m.startDate = req.startDate();
         m.endDate = req.endDate();
         m.repeatType = req.repeatType();
         m.verifyMethod = req.verifyMethod();
-        m.origin = Origin.PARENT;
-        m.status = Status.NEW;
+        m.origin = Origin.CHILD;
+        m.status = Status.PROPOSED;
         return m;
+    }
+
+    /** 제안(보류 포함)·추천 미션만 부모가 열 수 있다 */
+    public boolean canOpen() {
+        return status == Status.PROPOSED || status == Status.ON_HOLD || status == Status.RECOMMENDED;
+    }
+
+    /** 부모가 내용을 채워서 연다 ("금액 정해서 열기"). 출처(아이 제안·AI 추천)는 그대로 둔다 */
+    public void open(MissionCreateRequest req) {
+        fill(req);
+        status = Status.NEW;
+    }
+
+    public boolean canHold() {
+        return status == Status.PROPOSED;
+    }
+
+    /** 부모가 "다음에"를 누르면 보류. 아이 화면의 내가 제안한 미션에는 계속 보인다 */
+    public void hold() {
+        status = Status.ON_HOLD;
+    }
+
+    private void fill(MissionCreateRequest req) {
+        title = req.title();
+        criteria = req.criteria();
+        missionType = req.missionType();
+        rewardAmount = req.rewardAmount();
+        startDate = req.startDate();
+        endDate = req.endDate();
+        repeatType = req.repeatType();
+        verifyMethod = req.verifyMethod();
     }
 
     /**
