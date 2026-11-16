@@ -46,4 +46,9 @@ public class FamilySetting {
         this.autoTransfer = autoTransfer;
         this.settlementDay = settlementDay;
     }
+
+    /** 미션 상한(용돈 대비 %)을 바꾼다 */
+    public void updateMissionCapRate(int missionCapRate) {
+        this.missionCapRate = missionCapRate;
+    }
 }
