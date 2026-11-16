@@ -65,15 +65,16 @@ class MissionProposalApiTest {
     }
 
     @Test
-    void 부모가_제안을_금액_정해서_열면_NEW가_되고_출처는_아이_제안으로_남는다() throws Exception {
+    // 아이가 바란 보상(3,000원)과 다른 금액(2,500원)으로 열어서, 바란 보상은 기록으로 남고 실제 보상만 정해지는지 본다
+    void 부모가_제안을_금액_정해서_열면_NEW가_되고_출처와_바란_보상은_남는다() throws Exception {
         mockMvc.perform(patch("/missions/4/open").header("X-Persona-Id", 1)
-                        .contentType(MediaType.APPLICATION_JSON).content(openBody(3000)))
+                        .contentType(MediaType.APPLICATION_JSON).content(openBody(2500)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("NEW"));
 
         mockMvc.perform(get("/missions/4").header("X-Persona-Id", 2))
                 .andExpect(jsonPath("$.data.origin").value("CHILD"))
-                .andExpect(jsonPath("$.data.rewardAmount").value(3000))
+                .andExpect(jsonPath("$.data.rewardAmount").value(2500))
                 .andExpect(jsonPath("$.data.desiredReward").value(3000));
         assertEquals(1, jdbc.queryForObject(
                 "SELECT COUNT(*) FROM notifications WHERE member_id = 2 AND type = 'NEW_MISSION'", Integer.class));
