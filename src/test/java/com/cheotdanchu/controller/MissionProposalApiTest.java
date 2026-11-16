@@ -11,11 +11,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** 시드 기준: 가족 A. 테스트마다 롤백 */
+/** 시드 기준: 미션 4 = 아이가 제안한 화분 미션(PROPOSED), 미션 1 = 진행 중. 가족 A 남은 한도 18,000원. 테스트마다 롤백 */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
@@ -31,6 +32,13 @@ class MissionProposalApiTest {
             {"title":"강아지 산책","missionType":"CHORE","desiredReward":2000,
              "startDate":"2026-10-19","endDate":"2026-10-25","repeatType":"DAILY","verifyMethod":"PHOTO"}
             """;
+
+    private String openBody(int reward) {
+        return """
+                {"title":"베란다 화분 물 주기","criteria":"일주일에 두 번","missionType":"CHORE","rewardAmount":%d,
+                 "startDate":"2026-10-19","endDate":"2026-11-15","repeatType":"WEEKLY","verifyMethod":"PHOTO"}
+                """.formatted(reward);
+    }
 
     @Test
     void 자녀가_제안하면_PROPOSED로_저장되고_부모에게_알림이_간다() throws Exception {
@@ -54,6 +62,35 @@ class MissionProposalApiTest {
         mockMvc.perform(post("/missions/proposals").header("X-Persona-Id", 2)
                         .contentType(MediaType.APPLICATION_JSON).content(PROPOSAL.replace("2026-10-25", "2026-10-01")))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 부모가_제안을_금액_정해서_열면_NEW가_되고_출처는_아이_제안으로_남는다() throws Exception {
+        mockMvc.perform(patch("/missions/4/open").header("X-Persona-Id", 1)
+                        .contentType(MediaType.APPLICATION_JSON).content(openBody(3000)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("NEW"));
+
+        mockMvc.perform(get("/missions/4").header("X-Persona-Id", 2))
+                .andExpect(jsonPath("$.data.origin").value("CHILD"))
+                .andExpect(jsonPath("$.data.rewardAmount").value(3000))
+                .andExpect(jsonPath("$.data.desiredReward").value(3000));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM notifications WHERE member_id = 2 AND type = 'NEW_MISSION'", Integer.class));
+    }
+
+    @Test
+    void 열_때도_남은_한도를_넘으면_422() throws Exception {
+        mockMvc.perform(patch("/missions/4/open").header("X-Persona-Id", 1)
+                        .contentType(MediaType.APPLICATION_JSON).content(openBody(18001)))
+                .andExpect(status().is(422));
+    }
+
+    @Test
+    void 제안이_아닌_미션은_열_수_없다() throws Exception {
+        mockMvc.perform(patch("/missions/1/open").header("X-Persona-Id", 1)
+                        .contentType(MediaType.APPLICATION_JSON).content(openBody(3000)))
+                .andExpect(status().isConflict());
     }
 
 }

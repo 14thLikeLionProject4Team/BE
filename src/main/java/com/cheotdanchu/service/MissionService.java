@@ -121,6 +121,22 @@ public class MissionService {
         return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
     }
 
+    /** 제안·보류·추천 미션을 부모가 금액을 정해서 연다. 새로 만드는 것과 같은 검사(기간·한도)를 하고 아이에게 알린다 */
+    @Transactional
+    public MissionCreateResponse openMission(Long personaId, Long missionId, MissionCreateRequest req) {
+        Member parent = parent(personaId);
+        Mission mission = familyMission(parent, missionId);
+        if (!mission.canOpen()) throw new GeneralException(ErrorStatus.MISSION_NOT_OPENABLE);
+        if (req.endDate().isBefore(req.startDate())) throw new GeneralException(ErrorStatus.INVALID_PERIOD);
+
+        Optional<Member> child = childOf(parent);
+        checkRewardCap(parent, child, req.rewardAmount());
+        mission.open(req);
+        notifyNewMission(child, mission);
+
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
     private Optional<Member> childOf(Member parent) {
         return memberRepository.findByFamily_FamilyIdAndRole(parent.getFamily().getFamilyId(), Member.Role.CHILD);
     }

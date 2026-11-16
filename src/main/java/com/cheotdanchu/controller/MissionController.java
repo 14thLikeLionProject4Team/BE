@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -85,6 +86,15 @@ public class MissionController {
             @RequestHeader("X-Persona-Id") Long personaId,
             @Valid @RequestBody MissionProposalRequest request) {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_PROPOSED, missionService.proposeMission(personaId, request));
+    }
+
+    @Operation(summary = "제안·추천 미션 오픈", description = "부모 전용. 제안(PROPOSED·ON_HOLD)·추천(RECOMMENDED) 미션을 미션 생성과 같은 필드로 채워 엽니다 → NEW, 자녀 알림. 그 외 상태는 409, 남은 한도 초과는 422.")
+    @PatchMapping("/missions/{missionId}/open")
+    public ApiResponse<MissionCreateResponse> openMission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long missionId,
+            @Valid @RequestBody MissionCreateRequest request) {
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_OPENED, missionService.openMission(personaId, missionId, request));
     }
 
     @Operation(summary = "미션 완료 제출", description = "자녀 전용. multipart/form-data, photos(사진 인증 미션이면 1장 이상). NEW·IN_PROGRESS만 제출 가능, 제출하면 SUBMITTED.")

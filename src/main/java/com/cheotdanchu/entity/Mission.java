@@ -86,6 +86,17 @@ public class Mission {
         return m;
     }
 
+    /** 제안(보류 포함)·추천 미션만 부모가 열 수 있다 */
+    public boolean canOpen() {
+        return status == Status.PROPOSED || status == Status.ON_HOLD || status == Status.RECOMMENDED;
+    }
+
+    /** 부모가 내용을 채워서 연다 ("금액 정해서 열기"). 출처(아이 제안·AI 추천)는 그대로 둔다 */
+    public void open(MissionCreateRequest req) {
+        fill(req);
+        status = Status.NEW;
+    }
+
     private void fill(MissionCreateRequest req) {
         title = req.title();
         criteria = req.criteria();
