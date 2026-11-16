@@ -89,7 +89,16 @@ public class AllowanceSuggestionService {
      */
     @Transactional
     public AllowanceSuggestion lockPending(Long familyId, Long suggestionId) {
-        AllowanceSuggestion suggestion = suggestionRepository.findByIdForUpdate(suggestionId)
+        return checkPending(suggestionRepository.findByIdForUpdate(suggestionId), familyId);
+    }
+
+    /** lockPending 과 같은 검사를 하되 잠그지 않는다. 저장하지 않고 미리 보여주기만 하는 곳이 쓴다 */
+    public AllowanceSuggestion findPending(Long familyId, Long suggestionId) {
+        return checkPending(suggestionRepository.findById(suggestionId), familyId);
+    }
+
+    private AllowanceSuggestion checkPending(Optional<AllowanceSuggestion> found, Long familyId) {
+        AllowanceSuggestion suggestion = found
                 .filter(s -> s.getFamilyId().equals(familyId))
                 .orElseThrow(() -> new GeneralException(ErrorStatus.SUGGESTION_NOT_FOUND));
         if (!suggestion.isPending()) throw new GeneralException(ErrorStatus.ALREADY_DECIDED);

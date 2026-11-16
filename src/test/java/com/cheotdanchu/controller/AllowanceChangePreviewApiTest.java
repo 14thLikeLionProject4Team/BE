@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -32,9 +33,14 @@ class AllowanceChangePreviewApiTest {
     JdbcTemplate jdbc;
 
     private ResultActions preview(int personaId, String amount, String reason) throws Exception {
+        return preview(personaId, amount, reason, null);
+    }
+
+    private ResultActions preview(int personaId, String amount, String reason, Long suggestionId) throws Exception {
         MockHttpServletRequestBuilder request = get("/allowance/changes/preview").header("X-Persona-Id", personaId);
         if (amount != null) request.param("amount", amount);
         if (reason != null) request.param("reason", reason);
+        if (suggestionId != null) request.param("suggestionId", suggestionId.toString());
         return mockMvc.perform(request);
     }
 
@@ -82,6 +88,43 @@ class AllowanceChangePreviewApiTest {
                 .andExpect(jsonPath("$.data.message").value(nullValue()))
                 .andExpect(jsonPath("$.data.diff").value(0))
                 .andExpect(jsonPath("$.data.effectiveFrom").value("2026-11-01"));
+    }
+
+    // 제안을 따라 저장하면 이유를 안 보내도 물가로 남는다. 미리보기도 제안 ID 를 받으면 같은 문구를 보여준다
+    @Test
+    void AI_제안_그대로의_금액이면_이유를_안_보내도_물가_문구가_나오고_저장_알림과_같다() throws Exception {
+        String shown = JsonPath.read(
+                preview(1, "73000", null, 1L).andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.message");
+        assertEquals("11월부터 용돈이 73,000원이 돼요. 물가가 올라서 부모님이 올렸어요.", shown);
+
+        mockMvc.perform(post("/allowance/changes").header("X-Persona-Id", 1).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\":73000,\"allowanceDay\":1,\"autoTransfer\":true,\"settlementDay\":25,\"suggestionId\":1}"))
+                .andExpect(status().isCreated());
+
+        assertEquals(shown, jdbc.queryForObject(
+                "SELECT body FROM notifications WHERE member_id = 2 AND type = 'ALLOWANCE_CHANGED'", String.class));
+    }
+
+    @Test
+    void 제안과_다른_금액이면_제안_ID가_있어도_물가_문구가_없다() throws Exception {
+        preview(1, "72000", null, 1L)
+                .andExpect(jsonPath("$.data.message").value("11월부터 용돈이 72,000원이 돼요."));
+    }
+
+    @Test
+    void 제안_ID가_있어도_직접_고른_이유가_우선한다() throws Exception {
+        preview(1, "73000", "SCHOOL", 1L)
+                .andExpect(jsonPath("$.data.message").value("11월부터 용돈이 73,000원이 돼요."));
+    }
+
+    @Test
+    void 이미_처리했거나_다른_가족이거나_없는_제안이면_저장과_같은_오류다() throws Exception {
+        preview(3, "73000", null, 1L).andExpect(status().isNotFound());
+        preview(1, "73000", null, 999L).andExpect(status().isNotFound());
+
+        mockMvc.perform(patch("/allowance/suggestions/1").header("X-Persona-Id", 1)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"KEPT\"}")).andExpect(status().isOk());
+        preview(1, "73000", null, 1L).andExpect(status().isConflict());
     }
 
     @Test

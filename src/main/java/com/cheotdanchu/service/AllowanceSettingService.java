@@ -40,18 +40,21 @@ public class AllowanceSettingService {
     /**
      * 저장하면 아이에게 가는 알림 문구를 미리 보여준다. 저장하지 않고, 문구는 저장할 때와 같은 코드로 만든다.
      * diff 는 다음 달 1일부터 적용될 용돈과 새 금액의 차이다 (저장할 때의 이전 금액과 같은 기준).
+     * AI 제안을 따라 저장할 화면이면 suggestionId 를 함께 받아서, 저장할 때와 같은 이유(물가)로 문구를 만든다.
      */
     @Transactional(readOnly = true)
-    public AllowanceChangeDtos.PreviewResponse preview(Long personaId, Integer amount, AllowanceChange.Reason reason) {
+    public AllowanceChangeDtos.PreviewResponse preview(Long personaId, Integer amount, AllowanceChange.Reason reason, Long suggestionId) {
         Member parent = parent(personaId);
         if (amount == null || amount < 1 || reason == AllowanceChange.Reason.INITIAL) throw new GeneralException(ErrorStatus.INVALID_INPUT);
+        Long familyId = parent.getFamily().getFamilyId();
+        AllowanceSuggestion suggestion = suggestionId == null ? null : suggestionService.findPending(familyId, suggestionId);
 
         LocalDate effectiveFrom = allowanceChangeService.nextEffectiveDate();
-        Integer scheduled = allowanceChangeService.scheduledAmount(parent.getFamily().getFamilyId()).orElse(null);
+        Integer scheduled = allowanceChangeService.scheduledAmount(familyId).orElse(null);
         // 금액이 이미 정해진 값과 같으면 저장해도 이력·알림이 생기지 않으므로 보여줄 알림 문구가 없다
         boolean unchanged = amount.equals(scheduled);
         return new AllowanceChangeDtos.PreviewResponse(
-                unchanged ? null : AllowanceChangeService.message(effectiveFrom, amount, scheduled, reason),
+                unchanged ? null : AllowanceChangeService.message(effectiveFrom, amount, scheduled, reasonOf(reason, follows(suggestion, amount))),
                 scheduled == null ? null : amount - scheduled,
                 effectiveFrom);
     }
@@ -106,9 +109,8 @@ public class AllowanceSettingService {
                 ? null : suggestionService.lockPending(familyId, request.suggestionId());
         setting.updateAllowanceSettings(request.allowanceDay(), request.autoTransfer(), request.settlementDay());
 
-        boolean followsSuggestion = suggestion != null && request.amount() == suggestion.getSuggestedAmount();
-        AllowanceChange.Reason reason = request.reason() == null && followsSuggestion
-                ? AllowanceChange.Reason.INFLATION : request.reason();
+        boolean followsSuggestion = follows(suggestion, request.amount());
+        AllowanceChange.Reason reason = reasonOf(request.reason(), followsSuggestion);
 
         LocalDate effectiveFrom = allowanceChangeService.nextEffectiveDate();
         Integer scheduled = allowanceChangeService.scheduledAmount(familyId).orElse(null);
@@ -127,6 +129,16 @@ public class AllowanceSettingService {
         }
         return new AllowanceChangeDtos.SaveResponse(
                 change.getChangeId(), change.getPrevAmount(), change.getAmount(), change.getEffectiveFrom(), true);
+    }
+
+    /** AI 제안이 있고 금액이 제안한 금액 그대로일 때만 제안을 따른 것이다 (저장과 미리보기가 같은 기준을 쓴다) */
+    private static boolean follows(AllowanceSuggestion suggestion, int amount) {
+        return suggestion != null && amount == suggestion.getSuggestedAmount();
+    }
+
+    /** 이유를 안 골랐더라도 제안을 따랐다면 물가로 남긴다 (AI 제안 처리 API 와 같은 이유) */
+    private static AllowanceChange.Reason reasonOf(AllowanceChange.Reason chosen, boolean followsSuggestion) {
+        return chosen == null && followsSuggestion ? AllowanceChange.Reason.INFLATION : chosen;
     }
 
     private Member parent(Long personaId) {
