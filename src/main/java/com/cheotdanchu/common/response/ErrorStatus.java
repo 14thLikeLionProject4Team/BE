@@ -32,7 +32,8 @@ public enum ErrorStatus {
     ALREADY_DECIDED(409, "이미 처리한 제안이에요."),
     SUGGESTION_OUTDATED(409, "용돈이 이미 바뀌어서 이 제안은 쓸 수 없어요."),
     FAMILY_SETTING_NOT_FOUND(404, "가족 약속 설정을 찾을 수 없습니다"),
-    ACCOUNT_NOT_FOUND(404, "연결된 계좌를 찾을 수 없습니다");
+    ACCOUNT_NOT_FOUND(404, "연결된 계좌를 찾을 수 없습니다"),
+    AI_UNAVAILABLE(503, "지금은 답변하기 어려워요. 잠시 후 다시 물어봐 주세요.");
 
     private final int code;
     private final String message;

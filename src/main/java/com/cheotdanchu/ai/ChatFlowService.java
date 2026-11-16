@@ -1,5 +1,7 @@
 package com.cheotdanchu.ai;
 
+import com.cheotdanchu.common.exception.GeneralException;
+import com.cheotdanchu.common.response.ErrorStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -70,7 +72,9 @@ public class ChatFlowService {
 
     String classify(String message) {
         Map<String, Object> res = llm.chatJson(prompts.build("classify"), message);
-        Object kind = res == null ? null : res.get("kind");
+        // 다시 시도해도 LLM이 답하지 않으면(연결 오류·키 없음) 대체 문장 대신 잠시 후 다시 물어보게 한다
+        if (res == null) throw new GeneralException(ErrorStatus.AI_UNAVAILABLE);
+        Object kind = res.get("kind");
         if (kind == null || !KINDS.contains(kind.toString())) {
             log.warn("분류 실패 → 금융지식으로 처리: {}", res);
             return "금융지식";
@@ -140,7 +144,7 @@ public class ChatFlowService {
             reply = AnswerGuard.WORRY_FALLBACK;
         }
         store.addWorryTurn(personaId, message, reply);
-        return new AiDtos.ChatResponse("고민", reply, List.of(), List.of(), List.of(), false, fallback);
+        return new AiDtos.ChatResponse("고민", reply, List.of(), List.of(), List.of(), false, fallback, toParent(res));
     }
 
     // ───────────────────────── 대화창을 나갈 때 ─────────────────────────
@@ -239,6 +243,15 @@ public class ChatFlowService {
 
     private static AiDtos.ChatResponse simple(String kind, String answer) {
         return new AiDtos.ChatResponse(kind, answer, List.of(), List.of(), List.of(), false, null);
+    }
+
+    /** 고민 대화 답의 to_parent. 요청 문장이 없거나 금지어가 있으면 후보로 만들지 않는다 */
+    private static AiDtos.ToParent toParent(Map<String, Object> res) {
+        if (res == null || !(res.get("to_parent") instanceof Map<?, ?> m)) return null;
+        String request = asText(m.get("request"));
+        if (request == null || AnswerGuard.forbiddenIn(request) != null) return null;
+        String reason = asText(m.get("reason"));
+        return new AiDtos.ToParent(request, reason != null && AnswerGuard.forbiddenIn(reason) == null ? reason : null);
     }
 
     private static String asText(Object o) {
