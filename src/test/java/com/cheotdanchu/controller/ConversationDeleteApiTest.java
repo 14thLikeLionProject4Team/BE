@@ -39,6 +39,7 @@ class ConversationDeleteApiTest {
         insertMessage(2, "고마워");
         insertMessage(4, "뽀로로의 말");
         jdbc.update("INSERT INTO child_messages (family_id, message_id, request, status) VALUES (1, ?, '친구 생일 선물비가 더 필요해요', 'CANDIDATE')", source);
+        long childMessageId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
 
         mockMvc.perform(delete("/conversations").header("X-Persona-Id", 2))
                 .andExpect(status().isOk())
@@ -47,7 +48,7 @@ class ConversationDeleteApiTest {
 
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM chat_messages WHERE member_id = 2", Integer.class));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM chat_messages WHERE member_id = 4", Integer.class));
-        Map<String, Object> kept = jdbc.queryForMap("SELECT message_id, status FROM child_messages WHERE family_id = 1");
+        Map<String, Object> kept = jdbc.queryForMap("SELECT message_id, status FROM child_messages WHERE child_message_id = ?", childMessageId);
         assertNull(kept.get("message_id"));
         assertEquals("CANDIDATE", kept.get("status"));
     }

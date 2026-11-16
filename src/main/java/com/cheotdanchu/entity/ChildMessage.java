@@ -74,6 +74,35 @@ public class ChildMessage {
         return m;
     }
 
+    /** 자녀는 후보(CANDIDATE)일 때만 월말에 전하기·지금 전하기·버리기를 고를 수 있다 */
+    public boolean canChildChangeTo(Status to) {
+        return status == Status.CANDIDATE && (to == Status.MONTHLY || to == Status.SENT || to == Status.DISCARDED);
+    }
+
+    public void changeByChild(Status to, LocalDateTime at) {
+        if (to == Status.SENT) {
+            send(Delivery.NOW, at);
+            return;
+        }
+        status = to;
+    }
+
+    /** 부모는 전해진 말(SENT)에만 같이 이야기하기·확인했어요로 답할 수 있다 */
+    public boolean canParentChangeTo(Status to) {
+        return status == Status.SENT && (to == Status.DISCUSS || to == Status.ACKNOWLEDGED);
+    }
+
+    public void decideByParent(Status to, LocalDateTime at) {
+        status = to;
+        decidedAt = at;
+    }
+
+    private void send(Delivery how, LocalDateTime at) {
+        status = Status.SENT;
+        delivery = how;
+        sentAt = at;
+    }
+
     public enum Status { CANDIDATE, MONTHLY, SENT, DISCUSS, ACKNOWLEDGED, DISCARDED }
 
     public enum Delivery { NOW, MONTHLY }

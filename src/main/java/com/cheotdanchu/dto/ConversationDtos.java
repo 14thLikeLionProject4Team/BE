@@ -20,6 +20,16 @@ public final class ConversationDtos {
 
     public record DeleteResponse(int deletedCount) {}
 
+    public record StatusRequest(ChildMessage.Status status) {}
+
+    /** 자녀가 바꾸면 delivery·sentAt, 부모가 답하면 decidedAt이 채워진다 */
+    public record StatusResponse(Long childMessageId, ChildMessage.Status status, ChildMessage.Delivery delivery,
+                                 LocalDateTime sentAt, LocalDateTime decidedAt) {
+        public static StatusResponse of(ChildMessage m) {
+            return new StatusResponse(m.getChildMessageId(), m.getStatus(), m.getDelivery(), m.getSentAt(), m.getDecidedAt());
+        }
+    }
+
     /** childMessage: 이번 답에서 전할 말 후보가 생겼을 때만 (없으면 null) */
     public record SendResponse(Message reply, ChildMessageItem childMessage) {}
 

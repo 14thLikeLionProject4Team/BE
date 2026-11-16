@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -40,6 +42,16 @@ public class ConversationController {
     @DeleteMapping("/conversations")
     public ApiResponse<ConversationDtos.DeleteResponse> deleteAll(@RequestHeader("X-Persona-Id") Long personaId) {
         return ApiResponse.onSuccess(SuccessStatus.CONVERSATION_DELETED, conversationService.deleteAll(personaId));
+    }
+
+    @Operation(summary = "전할 말 상태 변경", description = "자녀·부모 공용, 역할마다 보낼 수 있는 값이 다르다. 자녀(CANDIDATE일 때): MONTHLY(월말에 전하기)·SENT(지금 전하기, delivery=NOW)·DISCARDED. 부모(SENT일 때): DISCUSS·ACKNOWLEDGED. 다른 가족의 말 404, 지금 상태나 역할에 맞지 않는 값 409. SENT가 되면 부모 결정 카드에 뜨고, 부모가 답하면 사라진다.")
+    @PatchMapping("/child-messages/{childMessageId}")
+    public ApiResponse<ConversationDtos.StatusResponse> changeStatus(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long childMessageId,
+            @RequestBody ConversationDtos.StatusRequest request) {
+        ConversationDtos.StatusResponse result = conversationService.changeStatus(personaId, childMessageId, request.status());
+        return ApiResponse.onSuccess(SuccessStatus.CHILD_MESSAGE_UPDATED, ConversationService.statusMessage(result.status()), result);
     }
 
     @Operation(summary = "메시지 전송", description = "자녀 전용. 메시지를 보내고 첫단추 답을 받는다. cardType: TEXT(일반·고민), RAG(금융 설명, payload.inScope·sources), NUMBER(내 숫자). 고민 대화에서 부모님께 바라는 게 나오면 childMessage에 전할 말 후보(CANDIDATE). 빈 메시지 400, LLM 호출 실패 503.")

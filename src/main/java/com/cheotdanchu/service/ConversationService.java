@@ -87,6 +87,39 @@ public class ConversationService {
         return new ConversationDtos.DeleteResponse(deleted);
     }
 
+    /**
+     * 전할 말 상태를 바꾼다. 자녀와 부모가 같은 API를 쓰고 역할마다 고를 수 있는 값이 다르다.
+     * 자녀(후보일 때): MONTHLY·SENT(지금 전하기)·DISCARDED, 부모(전해진 말): DISCUSS·ACKNOWLEDGED.
+     * 다른 가족의 말은 있는지도 알려주지 않으려고 404, 고를 수 없는 값이면 409.
+     */
+    @Transactional
+    public ConversationDtos.StatusResponse changeStatus(Long personaId, Long childMessageId, ChildMessage.Status to) {
+        Member member = memberRepository.getPersona(personaId);
+        ChildMessage message = childMessageRepository.findByIdForUpdate(childMessageId)
+                .filter(m -> m.getFamilyId().equals(member.getFamily().getFamilyId()))
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CHILD_MESSAGE_NOT_FOUND));
+
+        boolean byChild = member.getRole() == Member.Role.CHILD;
+        if (to == null || !(byChild ? message.canChildChangeTo(to) : message.canParentChangeTo(to))) {
+            throw new GeneralException(ErrorStatus.INVALID_STATUS_TRANSITION);
+        }
+        if (byChild) message.changeByChild(to, demoNow());
+        else message.decideByParent(to, demoNow());
+        return ConversationDtos.StatusResponse.of(message);
+    }
+
+    /** 상태를 바꾼 뒤 화면에 보여줄 문구 */
+    public static String statusMessage(ChildMessage.Status status) {
+        return switch (status) {
+            case SENT -> "부모님께 전했어요.";
+            case MONTHLY -> "월말 회고 때 전할지 다시 물어볼게요.";
+            case DISCARDED -> "저장하지 않았어요.";
+            case DISCUSS -> "같이 이야기하기로 했어요.";
+            case ACKNOWLEDGED -> "확인했어요.";
+            case CANDIDATE -> "전할 말 상태를 바꿨어요.";
+        };
+    }
+
     /** 부르는 말: 받침이 있으면 "아"(지민아), 없으면 "야"(루피야) */
     static String vocative(String name) {
         if (name.isEmpty()) return "야";
