@@ -64,6 +64,7 @@ public class MissionService {
     private static final EnumSet<Mission.Status> ENDED =
             EnumSet.of(Mission.Status.COMPLETED, Mission.Status.CANCELED, Mission.Status.EXPIRED);
     private static final int ENDED_PAGE_SIZE = 20;
+    private static final int RECOMMENDATION_PAGE_SIZE = 10;
 
     private final MemberRepository memberRepository;
     private final MissionRepository missionRepository;
@@ -347,6 +348,26 @@ public class MissionService {
                 .ifPresent(p -> notificationRepository.save(Notification.of(p, Notification.Type.MISSION_REMIND,
                         child.getName() + (KoreanText.hasBatchim(child.getName()) ? "이" : "가") + " 미션 확인을 기다려요",
                         submission.getMission().getTitle(), submission.getSubmissionId(), demoNow())));
+    }
+
+    /**
+     * 첫단추 추천 미션 목록. 자녀 화면(CHILD)과 부모 화면(PARENT) 추천은 따로이고, target은 내 역할과 같아야 한다.
+     * 10개씩, cursor는 이전 페이지 마지막 missionId. 추천은 시드로 넣어 둔다
+     */
+    public MissionQueryDtos.RecommendationListResponse getRecommendations(Long personaId, Mission.RecommendTo recommendTo, Long cursor) {
+        Member member = memberRepository.getPersona(personaId);
+        if (recommendTo == null) throw new GeneralException(ErrorStatus.INVALID_INPUT, "target은 CHILD 또는 PARENT예요.");
+        boolean mine = (member.getRole() == Member.Role.CHILD) == (recommendTo == Mission.RecommendTo.CHILD);
+        if (!mine) throw new GeneralException(ErrorStatus.INVALID_INPUT, "내 화면의 추천만 볼 수 있어요.");
+
+        List<Mission> page = missionRepository.findByFamily_FamilyIdAndStatusAndRecommendToAndMissionIdGreaterThanOrderByMissionId(
+                member.getFamily().getFamilyId(), Mission.Status.RECOMMENDED, recommendTo, cursor == null ? 0L : cursor,
+                PageRequest.of(0, RECOMMENDATION_PAGE_SIZE + 1));
+        boolean hasNext = page.size() > RECOMMENDATION_PAGE_SIZE;
+        List<MissionQueryDtos.Recommendation> items = page.stream().limit(RECOMMENDATION_PAGE_SIZE)
+                .map(m -> new MissionQueryDtos.Recommendation(m.getMissionId(), m.getTitle(), m.getMissionType(), m.getRewardAmount(), null))
+                .toList();
+        return new MissionQueryDtos.RecommendationListResponse(items, hasNext ? items.get(items.size() - 1).missionId() : null);
     }
 
     private Member child(Long personaId) {

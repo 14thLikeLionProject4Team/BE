@@ -51,6 +51,10 @@ public class Mission {
     @Column(nullable = false)
     private Origin origin;
 
+    /** 첫단추 추천 미션이 어느 화면 추천인지 (자녀 화면 / 부모 화면). 추천이 아니면 null */
+    @Enumerated(EnumType.STRING)
+    private RecommendTo recommendTo;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Status status;
@@ -186,5 +190,7 @@ public class Mission {
     public enum RepeatType { ONCE, DAILY, WEEKLY, MONTHLY }
     public enum VerifyMethod { PHOTO, DIRECT }
     public enum Origin { PARENT, CHILD, AI }
+    public enum RecommendTo { CHILD, PARENT }
+
     public enum Status { RECOMMENDED, PROPOSED, ON_HOLD, NEW, IN_PROGRESS, SUBMITTED, COMPLETED, CANCELED, EXPIRED }
 }

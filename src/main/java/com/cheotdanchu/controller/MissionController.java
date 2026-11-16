@@ -12,6 +12,7 @@ import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionQueryDtos;
 import com.cheotdanchu.dto.MissionSubmitResponse;
 import com.cheotdanchu.dto.SubmissionReviewDtos;
+import com.cheotdanchu.entity.Mission;
 import com.cheotdanchu.service.MissionService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
@@ -161,6 +162,15 @@ public class MissionController {
             @RequestHeader("X-Persona-Id") Long personaId,
             @PathVariable Long missionId) {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_CANCELED, missionService.cancelMission(personaId, missionId));
+    }
+
+    @Operation(summary = "추천 미션 목록", description = "자녀·부모 공용. target=CHILD(자녀 화면) | PARENT(부모 화면), 내 역할과 같아야 한다(다르면 400). 10개씩, cursor는 이전 페이지의 nextCursor. 부모 화면 추천은 '제안·추천 미션 오픈'으로 열고, 자녀 화면 추천은 '추천 미션 제안'으로 부모에게 제안한다.")
+    @GetMapping("/missions/recommendations")
+    public ApiResponse<MissionQueryDtos.RecommendationListResponse> getRecommendations(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @RequestParam(required = false) Mission.RecommendTo target,
+            @RequestParam(required = false) Long cursor) {
+        return ApiResponse.onSuccess(SuccessStatus.RECOMMENDATIONS_OK, missionService.getRecommendations(personaId, target, cursor));
     }
 
     @Operation(summary = "미션 상세 조회", description = "미션 한 건의 상세와 제출 이력(최신순, 사진 포함). 자녀·부모 공용. 다른 가족의 미션은 404.")
