@@ -6,6 +6,7 @@ import com.cheotdanchu.common.response.ErrorStatus;
 import com.cheotdanchu.common.response.SuccessStatus;
 import com.cheotdanchu.dto.MissionCreateRequest;
 import com.cheotdanchu.dto.MissionCreateResponse;
+import com.cheotdanchu.dto.MissionProposalRequest;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionQueryDtos;
 import com.cheotdanchu.dto.MissionSubmitResponse;
@@ -17,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -38,7 +40,7 @@ public class MissionController {
 
     @Operation(summary = "미션 목록 (진행 중 / 제안 / 종료)",
             description = "status=active: NEW·IN_PROGRESS·SUBMITTED 미션과 진행률. "
-                    + "status=PROPOSED: 아이가 제안한 미션 (자녀는 보류 포함). "
+                    + "status=PROPOSED: 아이가 제안한 미션 (보류 포함, status로 구분). "
                     + "status=ended: 완료·취소·만료 미션 최신순, cursor로 다음 페이지. 자녀·부모 공용.")
     @GetMapping("/missions")
     public ApiResponse<?> getMissions(
@@ -75,6 +77,32 @@ public class MissionController {
             @RequestHeader("X-Persona-Id") Long personaId,
             @Valid @RequestBody MissionCreateRequest request) {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_CREATED, missionService.createMission(personaId, request));
+    }
+
+    @Operation(summary = "미션 제안", description = "자녀 전용. 미션 생성과 같은 필드인데 보상 대신 desiredReward(바라는 보상). PROPOSED로 저장, 부모에게 MISSION_PROPOSED 알림.")
+    @PostMapping("/missions/proposals")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<MissionCreateResponse> proposeMission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @Valid @RequestBody MissionProposalRequest request) {
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_PROPOSED, missionService.proposeMission(personaId, request));
+    }
+
+    @Operation(summary = "제안·추천 미션 오픈", description = "부모 전용. 제안(PROPOSED·ON_HOLD)·추천(RECOMMENDED) 미션을 미션 생성과 같은 필드로 채워 엽니다 → NEW, 자녀 알림. 그 외 상태는 409, 남은 한도 초과는 422.")
+    @PatchMapping("/missions/{missionId}/open")
+    public ApiResponse<MissionCreateResponse> openMission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long missionId,
+            @Valid @RequestBody MissionCreateRequest request) {
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_OPENED, missionService.openMission(personaId, missionId, request));
+    }
+
+    @Operation(summary = "제안 보류", description = "부모 전용. 아이가 제안한 미션을 보류(\"다음에\"). PROPOSED → ON_HOLD, 그 외 상태는 409.")
+    @PatchMapping("/missions/{missionId}/hold")
+    public ApiResponse<MissionCreateResponse> holdMission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long missionId) {
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_HELD, missionService.holdMission(personaId, missionId));
     }
 
     @Operation(summary = "미션 완료 제출", description = "자녀 전용. multipart/form-data, photos(사진 인증 미션이면 1장 이상). NEW·IN_PROGRESS만 제출 가능, 제출하면 SUBMITTED.")
