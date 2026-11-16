@@ -1,6 +1,8 @@
 package com.cheotdanchu.entity;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
@@ -24,6 +26,10 @@ public class FamilySetting {
 
     private boolean autoTransfer;
 
+    /** 부모가 아이 결제를 어디까지 보는지 (지금은 총액만) */
+    @Enumerated(EnumType.STRING)
+    private Visibility visibility;
+
     /** 카드 결제일 (매월 며칠) */
     @JdbcTypeCode(SqlTypes.TINYINT)
     private int settlementDay;
@@ -31,6 +37,8 @@ public class FamilySetting {
     /** 미션 보상 한 달 상한 (용돈의 %) */
     @JdbcTypeCode(SqlTypes.TINYINT)
     private int missionCapRate;
+
+    public enum Visibility { TOTAL_ONLY }
 
     /** 용돈 정하기에서 저장한 보내는 날·자동이체·결제일 */
     public void updateAllowanceSettings(int allowanceDay, boolean autoTransfer, int settlementDay) {
