@@ -15,12 +15,15 @@ import com.cheotdanchu.entity.Member;
 import com.cheotdanchu.repository.ChatMessageRepository;
 import com.cheotdanchu.repository.ChildMessageRepository;
 import com.cheotdanchu.repository.MemberRepository;
+import com.cheotdanchu.repository.SettlementRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,6 +42,30 @@ public class ConversationService {
     private final ChatFlowService chatFlowService;
     private final RagRepository ragRepository;
     private final SeedRepository seedRepository;
+    private final SettlementRepository settlementRepository;
+
+    private static final String PRIVACY_NOTICE = "부모님은 이 대화를 볼 수 없어요. 네가 허락한 말만 전해져.";
+    private static final List<String> CHIPS = List.of("용돈이 부족해요", "돈 모으는 법", "부모님께 할 말 있어요");
+
+    /** 대화 탭 첫 인사(이번 정산 결제일까지 남은 날), 부모 비공개 안내, 추천 칩 */
+    public ConversationDtos.StarterResponse getStarter(Long personaId) {
+        Member child = child(personaId);
+        LocalDate today = seedRepository.today();
+        String hello = child.getName() + vocative(child.getName()) + " 안녕! ";
+        String greeting = settlementRepository.findCurrent(child.getFamily().getFamilyId(), today)
+                .map(s -> ChronoUnit.DAYS.between(today, s.getDueAt().toLocalDate()))
+                .map(days -> hello + (days <= 0 ? "오늘이 결제일이야." : "이번 달 결제일까지 " + days + "일 남았어."))
+                .orElse(hello + "궁금한 걸 편하게 물어봐.");
+        return new ConversationDtos.StarterResponse(greeting, PRIVACY_NOTICE, CHIPS);
+    }
+
+    /** 부르는 말: 받침이 있으면 "아"(지민아), 없으면 "야"(루피야) */
+    static String vocative(String name) {
+        if (name.isEmpty()) return "야";
+        char last = name.charAt(name.length() - 1);
+        boolean hangul = last >= 0xAC00 && last <= 0xD7A3;
+        return hangul && (last - 0xAC00) % 28 != 0 ? "아" : "야";
+    }
 
     /**
      * 자녀 메시지를 저장하고 첫단추 답을 받아 함께 저장한다. 고민 대화에서 부모님께 바라는 게 나오면 전할 말 후보도 만든다.

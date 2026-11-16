@@ -4,12 +4,15 @@ import com.cheotdanchu.entity.ChatMessage;
 import com.cheotdanchu.entity.ChildMessage;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /** 자녀 대화창 요청·응답 */
 public final class ConversationDtos {
 
     private ConversationDtos() {}
+
+    public record StarterResponse(String greeting, String privacyNotice, List<String> chips) {}
 
     public record SendRequest(String content) {}
 
