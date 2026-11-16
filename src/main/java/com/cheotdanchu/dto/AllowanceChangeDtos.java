@@ -29,4 +29,14 @@ public final class AllowanceChangeDtos {
             LocalDate effectiveFrom,
             boolean notifiedChild
     ) {}
+
+    /**
+     * 저장하면 아이에게 가는 알림 문구. 금액이 이미 정해진 값과 같으면 저장해도 알림이 가지 않아서 null.
+     * diff 는 지금 정해진 용돈과의 차이이고, 용돈을 정한 적이 없으면 null
+     */
+    public record PreviewResponse(
+            String message,
+            Integer diff,
+            LocalDate effectiveFrom
+    ) {}
 }

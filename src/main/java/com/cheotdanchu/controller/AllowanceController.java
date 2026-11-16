@@ -5,6 +5,7 @@ import com.cheotdanchu.common.response.SuccessStatus;
 import com.cheotdanchu.dto.AllowanceChangeDtos;
 import com.cheotdanchu.dto.AllowanceSetupDtos;
 import com.cheotdanchu.dto.AllowanceSuggestionDtos;
+import com.cheotdanchu.entity.AllowanceChange;
 import com.cheotdanchu.entity.AllowanceSuggestion;
 import com.cheotdanchu.service.AllowanceSettingService;
 import com.cheotdanchu.service.AllowanceSuggestionService;
@@ -52,6 +53,17 @@ public class AllowanceController {
         return ApiResponse.onSuccess(SuccessStatus.ALLOWANCE_SUGGESTION_APPLIED,
                 String.format(Locale.KOREA, "%d월부터 용돈이 %,d원으로 바뀌어요.", result.effectiveFrom().getMonthValue(), result.amount()),
                 result);
+    }
+
+    @Operation(summary = "용돈 변경 알림 문구 미리보기",
+            description = "부모 전용. 저장하면 아이에게 가는 알림 문구와 지금 정해진 용돈과의 차이(diff), 적용 시작일을 미리 보여줍니다. 저장하지 않습니다. amount 는 1 이상 필수, reason 은 선택(INFLATION, SCHOOL, RENEGOTIATION, ETC). AI 제안을 따라 저장할 화면이면 suggestionId 를 함께 보내세요: 제안한 금액 그대로이고 reason 을 안 보내면 저장할 때처럼 물가 문구가 붙습니다.")
+    @GetMapping("/allowance/changes/preview")
+    public ApiResponse<AllowanceChangeDtos.PreviewResponse> preview(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @RequestParam(required = false) Integer amount,
+            @RequestParam(required = false) AllowanceChange.Reason reason,
+            @RequestParam(required = false) Long suggestionId) {
+        return ApiResponse.onSuccess(SuccessStatus.ALLOWANCE_PREVIEW_OK, settingService.preview(personaId, amount, reason, suggestionId));
     }
 
     @Operation(summary = "용돈 설정 화면 조회",
