@@ -55,7 +55,7 @@ public class AllowanceSuggestionService {
      * 그 사이 부모가 용돈을 직접 정했다면, 옛 제안을 적용해 그 결정을 덮어쓰지 않게 한다.
      */
     private boolean isOutdated(AllowanceSuggestion suggestion, Long familyId) {
-        return allowanceChangeService.amountOn(familyId, allowanceChangeService.nextEffectiveDate())
+        return allowanceChangeService.scheduledAmount(familyId)
                 .map(amount -> amount != suggestion.getCurrentAmount())
                 .orElse(false);
     }
