@@ -7,6 +7,7 @@ import com.cheotdanchu.common.response.SuccessStatus;
 import com.cheotdanchu.dto.MissionCreateRequest;
 import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionProposalRequest;
+import com.cheotdanchu.dto.MissionUpdateRequest;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionQueryDtos;
 import com.cheotdanchu.dto.MissionSubmitResponse;
@@ -133,6 +134,15 @@ public class MissionController {
             @Valid @RequestBody SubmissionReviewDtos.RejectRequest request) {
         return ApiResponse.onSuccess(SuccessStatus.SUBMISSION_REJECTED,
                 missionService.reject(personaId, submissionId, request.reason()));
+    }
+
+    @Operation(summary = "미션 수정", description = "부모 전용. 새 미션·진행 중·확인 대기 미션의 이름·완료 기준·보상·마감일 중 보낸 것만 바꾼다. 끝난 미션이나 아직 열지 않은 제안·추천은 409, 보상이 이번 달 남은 한도를 넘으면 422, 마감일이 시작일보다 앞서면 400.")
+    @PatchMapping("/missions/{missionId}")
+    public ApiResponse<MissionCreateResponse> updateMission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long missionId,
+            @Valid @RequestBody MissionUpdateRequest request) {
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_UPDATED, missionService.updateMission(personaId, missionId, request));
     }
 
     @Operation(summary = "미션 상세 조회", description = "미션 한 건의 상세와 제출 이력(최신순, 사진 포함). 자녀·부모 공용. 다른 가족의 미션은 404.")

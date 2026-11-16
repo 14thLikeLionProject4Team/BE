@@ -106,6 +106,24 @@ public class Mission {
         status = Status.ON_HOLD;
     }
 
+    /** 아직 열지 않은 제안·보류·추천 미션 (수정·취소 대신 '열기'로 정한다) */
+    public boolean isNotOpenedYet() {
+        return status == Status.PROPOSED || status == Status.ON_HOLD || status == Status.RECOMMENDED;
+    }
+
+    /** 새 미션·진행 중·확인 대기 미션만 부모가 고칠 수 있다 (끝난 미션, 아직 열지 않은 제안·추천은 안 됨) */
+    public boolean canEdit() {
+        return status == Status.NEW || status == Status.IN_PROGRESS || status == Status.SUBMITTED;
+    }
+
+    /** 보낸 필드만 바꾼다 */
+    public void edit(String title, String criteria, Integer rewardAmount, LocalDate endDate) {
+        if (title != null) this.title = title;
+        if (criteria != null) this.criteria = criteria;
+        if (rewardAmount != null) this.rewardAmount = rewardAmount;
+        if (endDate != null) this.endDate = endDate;
+    }
+
     private void fill(MissionCreateRequest req) {
         title = req.title();
         criteria = req.criteria();

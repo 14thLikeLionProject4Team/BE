@@ -9,6 +9,7 @@ import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionListResponse;
 import com.cheotdanchu.dto.MissionProposalRequest;
+import com.cheotdanchu.dto.MissionUpdateRequest;
 import com.cheotdanchu.dto.MissionQueryDtos;
 import com.cheotdanchu.dto.MissionSubmitResponse;
 import com.cheotdanchu.dto.SubmissionReviewDtos;
@@ -144,6 +145,43 @@ public class MissionService {
         Mission mission = familyMissionForUpdate(parent, missionId);
         if (!mission.canHold()) throw new GeneralException(ErrorStatus.MISSION_NOT_HOLDABLE);
         mission.hold();
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
+    private static final String NOT_OPENED_YET = "아직 열지 않은 미션은 '열기'에서 정해 주세요.";
+
+    /**
+     * 진행 중인 미션 내용을 고친다 (보낸 필드만). 끝난 미션·아직 열지 않은 미션은 409.
+     * 보상을 바꾸면 새로 만들 때와 같은 한도 검사를 하고, 아이가 낸 완료를 확인하기 전(SUBMITTED)에는 보상을 못 바꾼다
+     * (확인 대기 중에 금액이 바뀌면 아이가 모르는 금액이 지급된다).
+     * 마감일은 오늘보다, 시작일보다 앞설 수 없고, 마감일을 당겨서 이미 승인받은 횟수가 목표를 채우면 바로 완료로 바꾼다
+     * (안 바꾸면 계속 제출·승인돼서 보상이 더 나간다).
+     */
+    @Transactional
+    public MissionCreateResponse updateMission(Long personaId, Long missionId, MissionUpdateRequest req) {
+        Member parent = parent(personaId);
+        if (req.isEmpty()) throw new GeneralException(ErrorStatus.INVALID_INPUT, "바꿀 내용을 보내 주세요.");
+        if (req.title() != null && req.title().isBlank()) throw new GeneralException(ErrorStatus.INVALID_INPUT, "미션 이름을 입력해 주세요.");
+
+        Mission mission = familyMissionForUpdate(parent, missionId);
+        if (mission.isNotOpenedYet()) throw new GeneralException(ErrorStatus.MISSION_NOT_EDITABLE, NOT_OPENED_YET);
+        if (!mission.canEdit()) throw new GeneralException(ErrorStatus.MISSION_NOT_EDITABLE);
+        if (req.rewardAmount() != null && mission.getStatus() == Mission.Status.SUBMITTED) {
+            throw new GeneralException(ErrorStatus.MISSION_NOT_EDITABLE, "아이가 낸 완료를 먼저 확인한 뒤 보상을 바꿔 주세요.");
+        }
+        if (req.endDate() != null && req.endDate().isBefore(seedRepository.today())) {
+            throw new GeneralException(ErrorStatus.INVALID_PERIOD, "마감일은 오늘 이후로 정해 주세요.");
+        }
+        if (req.endDate() != null && mission.getStartDate() != null && req.endDate().isBefore(mission.getStartDate())) {
+            throw new GeneralException(ErrorStatus.INVALID_PERIOD);
+        }
+        if (req.rewardAmount() != null) checkRewardCap(parent, childOf(parent), req.rewardAmount());
+
+        mission.edit(req.title() == null ? null : req.title().strip(), req.criteria(), req.rewardAmount(), req.endDate());
+        if (mission.getStatus() == Mission.Status.IN_PROGRESS) {
+            mission.afterApproval((int) submissionRepository.countByMission_MissionIdAndReviewStatus(
+                    mission.getMissionId(), MissionSubmission.ReviewStatus.APPROVED));
+        }
         return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
     }
 
