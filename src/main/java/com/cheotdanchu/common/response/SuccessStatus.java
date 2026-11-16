@@ -14,6 +14,7 @@ public enum SuccessStatus {
     DECISIONS_OK(200, "결정 카드 조회 성공"),
     MESSAGE_SENT(201, "메시지 전송 성공"),
     CONVERSATION_STARTER_OK(200, "대화 시작 정보 조회 성공"),
+    CONVERSATION_MESSAGES_OK(200, "대화 기록 조회 성공"),
     MISSION_ACTIVE_LIST_OK(200, "진행 중인 미션 목록 조회 성공"),
     MISSION_DETAIL_OK(200, "미션 상세 조회 성공"),
     MISSION_PROPOSED_LIST_OK(200, "제안 미션 목록 조회 성공"),

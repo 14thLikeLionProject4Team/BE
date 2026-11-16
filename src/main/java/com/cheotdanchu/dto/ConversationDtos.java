@@ -16,6 +16,8 @@ public final class ConversationDtos {
 
     public record SendRequest(String content) {}
 
+    public record MessagesResponse(List<Message> messages, Long nextCursor) {}
+
     /** childMessage: 이번 답에서 전할 말 후보가 생겼을 때만 (없으면 null) */
     public record SendResponse(Message reply, ChildMessageItem childMessage) {}
 

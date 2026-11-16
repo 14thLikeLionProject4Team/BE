@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,6 +25,14 @@ public class ConversationController {
     @GetMapping("/conversations/starter")
     public ApiResponse<ConversationDtos.StarterResponse> getStarter(@RequestHeader("X-Persona-Id") Long personaId) {
         return ApiResponse.onSuccess(SuccessStatus.CONVERSATION_STARTER_OK, conversationService.getStarter(personaId));
+    }
+
+    @Operation(summary = "대화 기록 조회", description = "자녀 전용(부모 403). 내 대화 최신순, 20개씩. cursor는 이전 페이지의 nextCursor.")
+    @GetMapping("/conversations/messages")
+    public ApiResponse<ConversationDtos.MessagesResponse> getMessages(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @RequestParam(required = false) Long cursor) {
+        return ApiResponse.onSuccess(SuccessStatus.CONVERSATION_MESSAGES_OK, conversationService.getMessages(personaId, cursor));
     }
 
     @Operation(summary = "메시지 전송", description = "자녀 전용. 메시지를 보내고 첫단추 답을 받는다. cardType: TEXT(일반·고민), RAG(금융 설명, payload.inScope·sources), NUMBER(내 숫자). 고민 대화에서 부모님께 바라는 게 나오면 childMessage에 전할 말 후보(CANDIDATE). 빈 메시지 400, LLM 호출 실패 503.")

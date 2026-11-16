@@ -17,6 +17,7 @@ import com.cheotdanchu.repository.ChildMessageRepository;
 import com.cheotdanchu.repository.MemberRepository;
 import com.cheotdanchu.repository.SettlementRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +45,7 @@ public class ConversationService {
     private final SeedRepository seedRepository;
     private final SettlementRepository settlementRepository;
 
+    private static final int PAGE_SIZE = 20;
     private static final String PRIVACY_NOTICE = "부모님은 이 대화를 볼 수 없어요. 네가 허락한 말만 전해져.";
     private static final List<String> CHIPS = List.of("용돈이 부족해요", "돈 모으는 법", "부모님께 할 말 있어요");
 
@@ -57,6 +59,16 @@ public class ConversationService {
                 .map(days -> hello + (days <= 0 ? "오늘이 결제일이야." : "이번 달 결제일까지 " + days + "일 남았어."))
                 .orElse(hello + "궁금한 걸 편하게 물어봐.");
         return new ConversationDtos.StarterResponse(greeting, PRIVACY_NOTICE, CHIPS);
+    }
+
+    /** 내 대화 기록 최신순, 20개씩. cursor는 이전 페이지 마지막 messageId */
+    public ConversationDtos.MessagesResponse getMessages(Long personaId, Long cursor) {
+        Member child = child(personaId);
+        List<ChatMessage> page = chatMessageRepository.findByMemberIdAndMessageIdLessThanOrderByMessageIdDesc(
+                child.getMemberId(), cursor == null ? Long.MAX_VALUE : cursor, PageRequest.of(0, PAGE_SIZE + 1));
+        boolean hasNext = page.size() > PAGE_SIZE;
+        List<ConversationDtos.Message> messages = page.stream().limit(PAGE_SIZE).map(ConversationDtos.Message::of).toList();
+        return new ConversationDtos.MessagesResponse(messages, hasNext ? messages.get(messages.size() - 1).messageId() : null);
     }
 
     /** 부르는 말: 받침이 있으면 "아"(지민아), 없으면 "야"(루피야) */
