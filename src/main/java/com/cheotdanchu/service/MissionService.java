@@ -57,6 +57,7 @@ public class MissionService {
 
     private static final EnumSet<Mission.Status> ACTIVE =
             EnumSet.of(Mission.Status.NEW, Mission.Status.IN_PROGRESS, Mission.Status.SUBMITTED);
+    private static final EnumSet<Mission.Status> PROPOSALS = EnumSet.of(Mission.Status.PROPOSED, Mission.Status.ON_HOLD);
     private static final EnumSet<Mission.Status> ENDED =
             EnumSet.of(Mission.Status.COMPLETED, Mission.Status.CANCELED, Mission.Status.EXPIRED);
     private static final int ENDED_PAGE_SIZE = 20;
@@ -303,14 +304,14 @@ public class MissionService {
         return seedRepository.today().atTime(LocalTime.now().withNano(0));
     }
 
-    /** 제안 미션 목록. 자녀는 내가 제안한 미션(보류 포함), 부모는 아직 결정하지 않은 제안만 */
+    /**
+     * 제안 미션 목록 (PROPOSED·ON_HOLD). 자녀·부모 모두 보류한 제안까지 본다.
+     * 부모가 "다음에"를 누른 제안도 나중에 다시 열 수 있어야 해서 부모 목록에서도 빼지 않는다 (status로 구분).
+     */
     public MissionQueryDtos.ProposedListResponse getProposedMissions(Long personaId) {
         Member member = memberRepository.getPersona(personaId);
-        EnumSet<Mission.Status> statuses = member.getRole() == Member.Role.CHILD
-                ? EnumSet.of(Mission.Status.PROPOSED, Mission.Status.ON_HOLD)
-                : EnumSet.of(Mission.Status.PROPOSED);
         List<MissionQueryDtos.ProposedMission> missions = missionRepository
-                .findByFamily_FamilyIdAndStatusInOrderByCreatedAtDesc(member.getFamily().getFamilyId(), statuses)
+                .findByFamily_FamilyIdAndStatusInOrderByCreatedAtDesc(member.getFamily().getFamilyId(), PROPOSALS)
                 .stream()
                 .map(m -> new MissionQueryDtos.ProposedMission(m.getMissionId(), m.getTitle(), m.getMissionType(),
                         m.getStatus(), m.getCriteria(), m.getDesiredReward(), m.getCreatedAt()))

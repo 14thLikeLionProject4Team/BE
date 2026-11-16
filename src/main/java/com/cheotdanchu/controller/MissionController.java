@@ -40,7 +40,7 @@ public class MissionController {
 
     @Operation(summary = "미션 목록 (진행 중 / 제안 / 종료)",
             description = "status=active: NEW·IN_PROGRESS·SUBMITTED 미션과 진행률. "
-                    + "status=PROPOSED: 아이가 제안한 미션 (자녀는 보류 포함). "
+                    + "status=PROPOSED: 아이가 제안한 미션 (보류 포함, status로 구분). "
                     + "status=ended: 완료·취소·만료 미션 최신순, cursor로 다음 페이지. 자녀·부모 공용.")
     @GetMapping("/missions")
     public ApiResponse<?> getMissions(
