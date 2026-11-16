@@ -19,4 +19,7 @@ public interface ChildMessageRepository extends JpaRepository<ChildMessage, Long
 
     /** 부모 결정 카드: 아직 답하지 않은 전해진 말, 먼저 전한 순 */
     List<ChildMessage> findByFamilyIdAndStatusOrderBySentAtAscChildMessageIdAsc(Long familyId, ChildMessage.Status status);
+
+    /** 월말 회고: 월말에 전하기로 한 말, 먼저 만든 순 */
+    List<ChildMessage> findByFamilyIdAndStatusOrderByCreatedAtAscChildMessageIdAsc(Long familyId, ChildMessage.Status status);
 }

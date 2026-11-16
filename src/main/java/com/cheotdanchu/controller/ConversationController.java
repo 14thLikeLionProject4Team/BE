@@ -54,6 +54,12 @@ public class ConversationController {
         return ApiResponse.onSuccess(SuccessStatus.CHILD_MESSAGE_UPDATED, ConversationService.statusMessage(result.status()), result);
     }
 
+    @Operation(summary = "월말 회고 조회", description = "자녀 전용. 가장 최근에 끝난 정산을 돌아보는 질문과 월말에 전하기로 한(MONTHLY) 전할 말. 끝난 정산이 없으면 available=false.")
+    @GetMapping("/retrospects/current")
+    public ApiResponse<ConversationDtos.RetrospectResponse> getRetrospect(@RequestHeader("X-Persona-Id") Long personaId) {
+        return ApiResponse.onSuccess(SuccessStatus.RETROSPECT_OK, conversationService.getRetrospect(personaId));
+    }
+
     @Operation(summary = "메시지 전송", description = "자녀 전용. 메시지를 보내고 첫단추 답을 받는다. cardType: TEXT(일반·고민), RAG(금융 설명, payload.inScope·sources), NUMBER(내 숫자). 고민 대화에서 부모님께 바라는 게 나오면 childMessage에 전할 말 후보(CANDIDATE). 빈 메시지 400, LLM 호출 실패 503.")
     @PostMapping("/conversations/messages")
     @ResponseStatus(HttpStatus.CREATED)

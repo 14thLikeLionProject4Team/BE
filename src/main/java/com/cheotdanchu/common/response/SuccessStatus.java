@@ -17,6 +17,7 @@ public enum SuccessStatus {
     CONVERSATION_MESSAGES_OK(200, "대화 기록 조회 성공"),
     CONVERSATION_DELETED(200, "대화 기록을 지웠어요."),
     CHILD_MESSAGE_UPDATED(200, "전할 말 상태를 바꿨어요."),
+    RETROSPECT_OK(200, "월말 회고 조회 성공"),
     MISSION_ACTIVE_LIST_OK(200, "진행 중인 미션 목록 조회 성공"),
     MISSION_DETAIL_OK(200, "미션 상세 조회 성공"),
     MISSION_PROPOSED_LIST_OK(200, "제안 미션 목록 조회 성공"),

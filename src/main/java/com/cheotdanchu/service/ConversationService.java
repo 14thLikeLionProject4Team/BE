@@ -13,6 +13,7 @@ import com.cheotdanchu.dto.ConversationDtos;
 import com.cheotdanchu.entity.ChatMessage;
 import com.cheotdanchu.entity.ChildMessage;
 import com.cheotdanchu.entity.Member;
+import com.cheotdanchu.entity.Settlement;
 import com.cheotdanchu.repository.ChatMessageRepository;
 import com.cheotdanchu.repository.ChildMessageRepository;
 import com.cheotdanchu.repository.MemberRepository;
@@ -30,6 +31,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -48,6 +50,8 @@ public class ConversationService {
     private final SettlementRepository settlementRepository;
 
     private static final int PAGE_SIZE = 20;
+    private static final List<String> RETROSPECT_QUESTIONS = List.of(
+            "이번 달 가장 잘한 소비는 뭐였어?", "다음 달에 줄이고 싶은 게 있어?");
     private static final String PRIVACY_NOTICE = "부모님은 이 대화를 볼 수 없어요. 네가 허락한 말만 전해져.";
     private static final List<String> CHIPS = List.of("용돈이 부족해요", "돈 모으는 법", "부모님께 할 말 있어요");
 
@@ -118,6 +122,27 @@ public class ConversationService {
             case ACKNOWLEDGED -> "확인했어요.";
             case CANDIDATE -> "전할 말 상태를 바꿨어요.";
         };
+    }
+
+    /**
+     * 월말 회고: 가장 최근에 끝난 정산을 돌아보는 질문과, 월말에 전하기로 한(MONTHLY) 말.
+     * 끝난 정산이 하나도 없으면 회고할 기간이 없어서 available=false.
+     */
+    public ConversationDtos.RetrospectResponse getRetrospect(Long personaId) {
+        Member child = child(personaId);
+        Long familyId = child.getFamily().getFamilyId();
+        return latestSettlement(familyId)
+                .map(s -> new ConversationDtos.RetrospectResponse(true, s.getSettlementId(), RETROSPECT_QUESTIONS,
+                        childMessageRepository.findByFamilyIdAndStatusOrderByCreatedAtAscChildMessageIdAsc(familyId, ChildMessage.Status.MONTHLY)
+                                .stream().map(ConversationDtos.PendingMessage::of).toList()))
+                .orElse(new ConversationDtos.RetrospectResponse(false, null, List.of(), List.of()));
+    }
+
+    /** 가장 최근에 끝난 정산 (제외된 정산은 빼고) */
+    private Optional<Settlement> latestSettlement(Long familyId) {
+        List<Settlement> completed = settlementRepository.findByFamilyIdAndStatusAndExcludedFalseOrderByPeriodEndAsc(
+                familyId, Settlement.Status.COMPLETED);
+        return completed.isEmpty() ? Optional.empty() : Optional.of(completed.get(completed.size() - 1));
     }
 
     /** 부르는 말: 받침이 있으면 "아"(지민아), 없으면 "야"(루피야) */

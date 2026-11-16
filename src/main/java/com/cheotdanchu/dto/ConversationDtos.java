@@ -22,6 +22,15 @@ public final class ConversationDtos {
 
     public record StatusRequest(ChildMessage.Status status) {}
 
+    /** available=false(정산 전)면 settlementId null, questions·pendingMessages 빈 배열 */
+    public record RetrospectResponse(boolean available, Long settlementId, List<String> questions, List<PendingMessage> pendingMessages) {}
+
+    public record PendingMessage(Long childMessageId, String request, String reason) {
+        public static PendingMessage of(ChildMessage m) {
+            return new PendingMessage(m.getChildMessageId(), m.getRequest(), m.getReason());
+        }
+    }
+
     /** 자녀가 바꾸면 delivery·sentAt, 부모가 답하면 decidedAt이 채워진다 */
     public record StatusResponse(Long childMessageId, ChildMessage.Status status, ChildMessage.Delivery delivery,
                                  LocalDateTime sentAt, LocalDateTime decidedAt) {
