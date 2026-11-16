@@ -3,6 +3,7 @@ package com.cheotdanchu.service;
 import com.cheotdanchu.ai.AiDtos;
 import com.cheotdanchu.ai.AnswerGuard;
 import com.cheotdanchu.ai.ChatFlowService;
+import com.cheotdanchu.ai.ChatSessionStore;
 import com.cheotdanchu.ai.RagCard;
 import com.cheotdanchu.ai.RagRepository;
 import com.cheotdanchu.ai.SeedRepository;
@@ -41,6 +42,7 @@ public class ConversationService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChildMessageRepository childMessageRepository;
     private final ChatFlowService chatFlowService;
+    private final ChatSessionStore chatSessionStore;
     private final RagRepository ragRepository;
     private final SeedRepository seedRepository;
     private final SettlementRepository settlementRepository;
@@ -69,6 +71,20 @@ public class ConversationService {
         boolean hasNext = page.size() > PAGE_SIZE;
         List<ConversationDtos.Message> messages = page.stream().limit(PAGE_SIZE).map(ConversationDtos.Message::of).toList();
         return new ConversationDtos.MessagesResponse(messages, hasNext ? messages.get(messages.size() - 1).messageId() : null);
+    }
+
+    /**
+     * 내 대화 기록을 모두 지운다. 이미 만든 전할 말은 남기고 출처 메시지 연결만 끊긴다(message_id = NULL).
+     * 고민 대화 기억(이전 대화 맥락)도 함께 비워서, 지운 대화가 다음 답에 이어지지 않게 한다.
+     */
+    @Transactional
+    public ConversationDtos.DeleteResponse deleteAll(Long personaId) {
+        Member child = child(personaId);
+        int deleted = chatMessageRepository.deleteAllByMemberId(child.getMemberId());
+        String sessionKey = String.valueOf(child.getMemberId());
+        chatSessionStore.clearWorry(sessionKey);
+        chatSessionStore.setMemos(sessionKey, List.of());
+        return new ConversationDtos.DeleteResponse(deleted);
     }
 
     /** 부르는 말: 받침이 있으면 "아"(지민아), 없으면 "야"(루피야) */

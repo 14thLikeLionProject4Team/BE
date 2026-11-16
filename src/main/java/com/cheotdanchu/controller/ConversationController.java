@@ -7,6 +7,7 @@ import com.cheotdanchu.service.ConversationService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -33,6 +34,12 @@ public class ConversationController {
             @RequestHeader("X-Persona-Id") Long personaId,
             @RequestParam(required = false) Long cursor) {
         return ApiResponse.onSuccess(SuccessStatus.CONVERSATION_MESSAGES_OK, conversationService.getMessages(personaId, cursor));
+    }
+
+    @Operation(summary = "대화 기록 삭제", description = "자녀 전용. 내 대화 기록을 모두 지운다. 이미 만든 전할 말은 남고 출처 메시지 연결만 끊긴다.")
+    @DeleteMapping("/conversations")
+    public ApiResponse<ConversationDtos.DeleteResponse> deleteAll(@RequestHeader("X-Persona-Id") Long personaId) {
+        return ApiResponse.onSuccess(SuccessStatus.CONVERSATION_DELETED, conversationService.deleteAll(personaId));
     }
 
     @Operation(summary = "메시지 전송", description = "자녀 전용. 메시지를 보내고 첫단추 답을 받는다. cardType: TEXT(일반·고민), RAG(금융 설명, payload.inScope·sources), NUMBER(내 숫자). 고민 대화에서 부모님께 바라는 게 나오면 childMessage에 전할 말 후보(CANDIDATE). 빈 메시지 400, LLM 호출 실패 503.")
