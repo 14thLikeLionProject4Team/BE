@@ -3,6 +3,8 @@ package com.cheotdanchu.service;
 import com.cheotdanchu.ai.SeedRepository;
 import com.cheotdanchu.common.exception.GeneralException;
 import com.cheotdanchu.common.response.ErrorStatus;
+import com.cheotdanchu.dto.AllowanceSuggestionDtos;
+import com.cheotdanchu.dto.MissionQueryDtos;
 import com.cheotdanchu.dto.ParentHomeDtos;
 import com.cheotdanchu.entity.FamilySetting;
 import com.cheotdanchu.entity.Member;
@@ -19,6 +21,7 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -33,13 +36,13 @@ public class ParentHomeService {
     private final NotificationRepository notificationRepository;
     private final SettlementRepository settlementRepository;
     private final SeedRepository seedRepository;
+    private final AllowanceSuggestionService allowanceSuggestionService;
+    private final MissionService missionService;
 
     public ParentHomeDtos.HomeResponse getHome(Long personaId) {
-        Member parent = memberRepository.getPersona(personaId);
-        if (parent.getRole() != Member.Role.PARENT) throw new GeneralException(ErrorStatus.PARENT_ONLY);
+        Member parent = parent(personaId);
         Long familyId = parent.getFamily().getFamilyId();
-        Member child = memberRepository.findByFamily_FamilyIdAndRole(familyId, Member.Role.CHILD)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.PERSONA_NOT_FOUND));
+        Member child = childOf(parent);
 
         LocalDate today = seedRepository.today();
         LocalDate adultDay = child.getBirthDate().plusYears(ADULT_AGE);
@@ -56,6 +59,51 @@ public class ParentHomeService {
                 notificationRepository.countByMember_MemberIdAndReadAtIsNull(parent.getMemberId()),
                 adult ? List.of() : praiseChips(familyId, today, adultDay),
                 adult);
+    }
+
+    /**
+     * 부모가 지금 처리할 카드만 모은다 (별도 테이블 없음): AI 용돈 제안 → 아이가 전한 말 → 미션 확인 순.
+     * 전할 말(CHILD_MESSAGE)은 대화 기능을 만들 때 채운다. 카드가 없으면 빈 배열 (화면: "지금 정할 건 없어요")
+     */
+    public ParentHomeDtos.DecisionsResponse getDecisions(Long personaId) {
+        Member parent = parent(personaId);
+        LocalDate today = seedRepository.today();
+        List<ParentHomeDtos.DecisionCard> cards = new ArrayList<>();
+
+        AllowanceSuggestionDtos.SuggestionResponse suggestion = allowanceSuggestionService.getPending(parent);
+        if (suggestion != null) {
+            String childName = childOf(parent).getName();
+            int diff = suggestion.suggestedAmount() - suggestion.currentAmount();
+            cards.add(new ParentHomeDtos.DecisionCard(ParentHomeDtos.CardType.ALLOWANCE_SUGGESTION, suggestion.suggestionId(),
+                    String.format(Locale.KOREA, "%s 결제 품목 물가가 %s%% 올랐어요", childName, suggestion.inflationRate().stripTrailingZeros().toPlainString()),
+                    String.format(Locale.KOREA, "월 %,d원 → %,d원 (%+,d원)을 제안해요.", suggestion.currentAmount(), suggestion.suggestedAmount(), diff),
+                    "AI 용돈 제안"));
+        }
+
+        for (MissionQueryDtos.PendingSubmission s : missionService.getPendingSubmissions(personaId).submissions()) {
+            cards.add(new ParentHomeDtos.DecisionCard(ParentHomeDtos.CardType.MISSION_REVIEW, s.submissionId(), s.missionTitle(),
+                    s.rewardAmount() == null ? null : String.format(Locale.KOREA, "+%,d원", s.rewardAmount()),
+                    submittedLabel(s.submittedAt().toLocalDate(), today)));
+        }
+        return new ParentHomeDtos.DecisionsResponse(cards.size(), cards);
+    }
+
+    private static String submittedLabel(LocalDate submitted, LocalDate today) {
+        long days = ChronoUnit.DAYS.between(submitted, today);
+        if (days <= 0) return "오늘 제출";
+        if (days == 1) return "어제 제출";
+        return submitted.getMonthValue() + "월 " + submitted.getDayOfMonth() + "일 제출";
+    }
+
+    private Member parent(Long personaId) {
+        Member member = memberRepository.getPersona(personaId);
+        if (member.getRole() != Member.Role.PARENT) throw new GeneralException(ErrorStatus.PARENT_ONLY);
+        return member;
+    }
+
+    private Member childOf(Member parent) {
+        return memberRepository.findByFamily_FamilyIdAndRole(parent.getFamily().getFamilyId(), Member.Role.CHILD)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.PERSONA_NOT_FOUND));
     }
 
     /** 진행 상황 칭찬 칩: 최근 연속 완납 개월, 확인서 발급(만 19세)까지 남은 날 */
