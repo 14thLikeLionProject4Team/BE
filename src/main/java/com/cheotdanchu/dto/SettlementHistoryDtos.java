@@ -1,11 +1,13 @@
 package com.cheotdanchu.dto;
 
 import com.cheotdanchu.entity.Settlement;
+import com.cheotdanchu.entity.Transfer;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
-/** 정산 목록(마이(자녀)의 결제일 기록) 응답 */
+/** 정산 목록·상세(마이(자녀)의 결제일 기록, 결제 내역의 월별 상세) 응답 */
 public final class SettlementHistoryDtos {
 
     private SettlementHistoryDtos() {}
@@ -23,4 +25,25 @@ public final class SettlementHistoryDtos {
             Integer billedAmount,
             boolean isExcluded
     ) {}
+
+    /**
+     * paidAmount 는 결제일에 이체된 금액(결제일 정산 이체의 합)이고, shortfallAmount 는 결제일에 부족했던 금액(나중에 갚았어도 그때의 부족액)이다.
+     * resolvedAt 은 정산이 끝난 시각으로 끝나지 않았으면 null.
+     */
+    public record Detail(
+            Long settlementId,
+            LocalDate periodStart,
+            LocalDate periodEnd,
+            Settlement.Status status,
+            Settlement.Result result,
+            long billedAmount,
+            int paidAmount,
+            long shortfallAmount,
+            boolean isExcluded,
+            LocalDateTime resolvedAt,
+            List<TransferItem> transfers
+    ) {}
+
+    /** source 는 부족분 갚기(SHORTFALL_PAYMENT)에서만 값이 있다 */
+    public record TransferItem(Transfer.Type type, Transfer.Source source, int amount, LocalDateTime transferredAt) {}
 }

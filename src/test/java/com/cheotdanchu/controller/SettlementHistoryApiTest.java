@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 시드 기준 (정산 목록)
+ * 시드 기준
  * - 가족 A(루피 엄마 id 1, 루피 id 2): 끝난 정산 11건(2025-11 ~ 2026-09)과 정산 전인 이번 달 1건. 2026-03 정산은 5,200원이 부족해서 다음 용돈에서 자동 정산됐다.
  * - 가족 B(뽀로로 엄마 id 3, 뽀로로 id 4): 끝난 정산 27건. 부족분을 직접 보낸 달(2024-10)과 남은 돈으로 갚은 달(2025-01·2025-06)이 있다.
  * 테스트마다 롤백된다.
@@ -46,6 +46,9 @@ class SettlementHistoryApiTest {
         return mockMvc.perform(request);
     }
 
+    private ResultActions detail(int personaId, long settlementId) throws Exception {
+        return mockMvc.perform(get("/settlements/" + settlementId).header("X-Persona-Id", personaId));
+    }
 
     /** 가족의 정산 ID 를 종료일로 찾는다 (시드 적재 순서에 기대지 않는다) */
     private long settlementOf(int familyId, String periodEnd) {
@@ -150,5 +153,170 @@ class SettlementHistoryApiTest {
 
     private static String cursorOf(String raw) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+    }
+
+    // ---- 상세 ----
+
+    @Test
+    void 완납한_달은_결제일_정산_이체_하나와_정산이_끝난_시각을_본다() throws Exception {
+        detail(2, settlementOf(1, "2026-09-25"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("조회 성공"))
+                .andExpect(jsonPath("$.data.periodStart").value("2026-08-26"))
+                .andExpect(jsonPath("$.data.periodEnd").value("2026-09-25"))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.result").value("FULL_PAID"))
+                .andExpect(jsonPath("$.data.billedAmount").value(61500))
+                .andExpect(jsonPath("$.data.paidAmount").value(61500))
+                .andExpect(jsonPath("$.data.shortfallAmount").value(0))
+                .andExpect(jsonPath("$.data.isExcluded").value(false))
+                .andExpect(jsonPath("$.data.resolvedAt").value("2026-09-25T18:00:00"))
+                .andExpect(jsonPath("$.data.transfers.length()").value(1))
+                .andExpect(jsonPath("$.data.transfers[0].type").value("SETTLEMENT"))
+                .andExpect(jsonPath("$.data.transfers[0].source").value(nullValue()))
+                .andExpect(jsonPath("$.data.transfers[0].amount").value(61500))
+                .andExpect(jsonPath("$.data.transfers[0].transferredAt").value("2026-09-25T18:00:00"));
+    }
+
+    @Test
+    void 자동_정산된_달은_부족액과_자동_정산_이체가_함께_나온다() throws Exception {
+        detail(2, settlementOf(1, "2026-03-25"))
+                .andExpect(jsonPath("$.data.result").value("AUTO_DEDUCTED"))
+                .andExpect(jsonPath("$.data.billedAmount").value(75200))
+                .andExpect(jsonPath("$.data.paidAmount").value(70000))
+                .andExpect(jsonPath("$.data.shortfallAmount").value(5200))
+                .andExpect(jsonPath("$.data.resolvedAt").value("2026-04-01T09:00:00"))
+                .andExpect(jsonPath("$.data.transfers.length()").value(2))
+                .andExpect(jsonPath("$.data.transfers[0].type").value("SETTLEMENT"))
+                .andExpect(jsonPath("$.data.transfers[0].amount").value(70000))
+                .andExpect(jsonPath("$.data.transfers[1].type").value("AUTO_DEDUCT"))
+                .andExpect(jsonPath("$.data.transfers[1].amount").value(5200))
+                .andExpect(jsonPath("$.data.transfers[1].transferredAt").value("2026-04-01T09:00:00"));
+    }
+
+    @Test
+    void 스스로_해소한_달은_부족분을_어떻게_갚았는지_source가_나온다() throws Exception {
+        // 직접 송금한 달
+        detail(4, settlementOf(2, "2024-10-25"))
+                .andExpect(jsonPath("$.data.result").value("SELF_RESOLVED"))
+                .andExpect(jsonPath("$.data.shortfallAmount").value(4600))
+                .andExpect(jsonPath("$.data.transfers[1].type").value("SHORTFALL_PAYMENT"))
+                .andExpect(jsonPath("$.data.transfers[1].source").value("DIRECT"))
+                .andExpect(jsonPath("$.data.transfers[1].amount").value(4600))
+                .andExpect(jsonPath("$.data.resolvedAt").value("2024-10-28T20:00:00"));
+        // 지난달까지 남은 돈으로 갚은 달
+        detail(4, settlementOf(2, "2025-01-25"))
+                .andExpect(jsonPath("$.data.result").value("SELF_RESOLVED"))
+                .andExpect(jsonPath("$.data.transfers[1].type").value("SHORTFALL_PAYMENT"))
+                .andExpect(jsonPath("$.data.transfers[1].source").value("CARRYOVER"))
+                .andExpect(jsonPath("$.data.transfers[1].amount").value(7200));
+    }
+
+    @Test
+    void 정산_전인_이번_달은_청구액을_카드_결제로_보여주고_이체와_결과가_없다() throws Exception {
+        detail(2, settlementOf(1, "2026-10-25"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SCHEDULED"))
+                .andExpect(jsonPath("$.data.result").value(nullValue()))
+                .andExpect(jsonPath("$.data.billedAmount").value(79500))
+                .andExpect(jsonPath("$.data.paidAmount").value(0))
+                .andExpect(jsonPath("$.data.shortfallAmount").value(0))
+                .andExpect(jsonPath("$.data.resolvedAt").value(nullValue()))
+                .andExpect(jsonPath("$.data.transfers").isEmpty());
+    }
+
+    @Test
+    void 이체는_시간순이고_용돈과_미션_보상은_정산_이체에_섞이지_않는다() throws Exception {
+        // 이번 달에는 용돈·미션 보상 이체가 있지만 정산에 연결된 것이 아니라서 이체 내역에 나오지 않는다
+        assertEquals(true, jdbc.queryForObject(
+                "SELECT COUNT(*) > 0 FROM transfers WHERE settlement_id IS NULL AND type IN ('ALLOWANCE', 'MISSION_REWARD')", Boolean.class));
+
+        String body = detail(2, settlementOf(1, "2026-03-25")).andReturn().getResponse().getContentAsString();
+        List<String> times = JsonPath.read(body, "$.data.transfers[*].transferredAt");
+        assertEquals(times.stream().sorted().toList(), times);
+        List<String> types = JsonPath.read(body, "$.data.transfers[*].type");
+        assertEquals(List.of("SETTLEMENT", "AUTO_DEDUCT"), types);
+    }
+
+    /** 가족 A 의 이번 달 정산 ID (시드에서는 정산 전) */
+    private long openSettlement() {
+        return settlementOf(1, "2026-10-25");
+    }
+
+    /** 결제일 정산 이체를 넣는다 (루피 계좌 → 부모 계좌) */
+    private void insertSettlementTransfer(long settlementId, int amount) {
+        jdbc.update("INSERT INTO transfers (from_account_id, to_account_id, type, amount, settlement_id, transferred_at) "
+                + "SELECT c.account_id, p.account_id, 'SETTLEMENT', ?, ?, '2026-10-25 18:00:00' "
+                + "FROM accounts c, accounts p WHERE c.member_id = 2 AND p.member_id = 1", amount, settlementId);
+    }
+
+    /** 이번 달 정산을 부족이 남은 상태(SHORTFALL)로 만들고 결제일에 paid 원을 이체한 것으로 한다. billed 가 null 이면 청구액이 비어 있는 정산 */
+    private long shortfallSettlement(Integer billed, int paid) {
+        long id = openSettlement();
+        jdbc.update("UPDATE settlements SET status = 'SHORTFALL', billed_amount = ? WHERE settlement_id = ?", billed, id);
+        insertSettlementTransfer(id, paid);
+        return id;
+    }
+
+    @Test
+    void 결제일이_되어_정산이_필요한_상태는_부족액을_아직_말하지_않는다() throws Exception {
+        jdbc.update("UPDATE settlements SET status = 'REQUIRED' WHERE settlement_id = ?", openSettlement());
+
+        detail(2, openSettlement())
+                .andExpect(jsonPath("$.data.status").value("REQUIRED"))
+                .andExpect(jsonPath("$.data.billedAmount").value(79500))
+                .andExpect(jsonPath("$.data.shortfallAmount").value(0));
+    }
+
+    @Test
+    void 부족이_남은_상태는_청구액에서_결제일_이체를_뺀_부족액을_보여준다() throws Exception {
+        long id = shortfallSettlement(79500, 70000);
+
+        detail(2, id)
+                .andExpect(jsonPath("$.data.status").value("SHORTFALL"))
+                .andExpect(jsonPath("$.data.result").value(nullValue()))
+                .andExpect(jsonPath("$.data.billedAmount").value(79500))
+                .andExpect(jsonPath("$.data.paidAmount").value(70000))
+                .andExpect(jsonPath("$.data.shortfallAmount").value(9500))
+                .andExpect(jsonPath("$.data.resolvedAt").value(nullValue()));
+        jdbc.update("UPDATE settlements SET status = 'PARTIAL' WHERE settlement_id = ?", id);
+        detail(2, id).andExpect(jsonPath("$.data.shortfallAmount").value(9500));
+    }
+
+    @Test
+    void 청구액이_비어_있는_정산은_카드_결제_합계로_부족액을_센다() throws Exception {
+        long id = shortfallSettlement(null, 70000);
+
+        detail(2, id)
+                .andExpect(jsonPath("$.data.billedAmount").value(79500))
+                .andExpect(jsonPath("$.data.shortfallAmount").value(9500));
+    }
+
+    // 부족분 갚기(A-5)가 settlements.paid_amount 를 늘려도, 결제일에 부족했던 금액과 이체 내역은 그대로여야 한다
+    @Test
+    void paid_amount가_바뀌어도_결제일의_부족액은_그대로다() throws Exception {
+        long autoDeducted = settlementOf(1, "2026-03-25");
+        jdbc.update("UPDATE settlements SET paid_amount = 75200 WHERE settlement_id = ?", autoDeducted);
+
+        detail(2, autoDeducted)
+                .andExpect(jsonPath("$.data.paidAmount").value(70000))
+                .andExpect(jsonPath("$.data.shortfallAmount").value(5200));
+    }
+
+    @Test
+    void 남의_가족_정산이거나_없는_정산이면_404다() throws Exception {
+        detail(2, settlementOf(2, "2026-09-25")).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("정산을 찾을 수 없습니다"));
+        detail(4, settlementOf(1, "2026-09-25")).andExpect(status().isNotFound());
+        detail(2, 999999).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void 부모가_조회하면_403이다() throws Exception {
+        list(1, null, null)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("자녀만 조회할 수 있어요"));
+        detail(1, settlementOf(1, "2026-09-25")).andExpect(status().isForbidden());
+        detail(3, settlementOf(2, "2026-09-25")).andExpect(status().isForbidden());
     }
 }

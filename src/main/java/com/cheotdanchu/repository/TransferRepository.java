@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface TransferRepository extends JpaRepository<Transfer, Long> {
 
@@ -21,6 +22,9 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
             """)
     long sumReceived(@Param("accountId") Long accountId, @Param("type") Transfer.Type type,
                      @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /** 정산에 연결된 이체(결제일 정산·부족분 갚기·자동 정산)를 시간순으로 */
+    List<Transfer> findBySettlementIdOrderByTransferredAtAscTransferIdAsc(Long settlementId);
 
     /** 미션 하나에 지금까지 지급한 보상 합계 */
     @Query("select coalesce(sum(t.amount), 0L) from Transfer t where t.missionId = :missionId and t.type = :type")

@@ -10,6 +10,7 @@ import com.cheotdanchu.service.SettlementService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -43,5 +44,14 @@ public class SettlementController {
             @RequestParam(required = false) Integer size,
             @RequestParam(required = false) String cursor) {
         return ApiResponse.onSuccess(SuccessStatus.SETTLEMENT_LIST_OK, settlementHistoryService.getHistory(personaId, size, cursor));
+    }
+
+    @Operation(summary = "정산 상세 조회",
+            description = "자녀 전용(부모는 403). 한 달치 정산의 금액·결과와 그 달 정산에 연결된 이체 내역(결제일 정산 SETTLEMENT, 부족분 갚기 SHORTFALL_PAYMENT(source: CARRYOVER 남은 돈 / DIRECT 직접 송금), 자동 정산 AUTO_DEDUCT)을 시간순으로. shortfallAmount 는 결제일에 부족했던 금액(나중에 갚았어도 그때의 부족액)입니다. 남의 정산이면 404.")
+    @GetMapping("/settlements/{settlementId}")
+    public ApiResponse<SettlementHistoryDtos.Detail> getDetail(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long settlementId) {
+        return ApiResponse.onSuccess(SuccessStatus.SETTLEMENT_DETAIL_OK, settlementHistoryService.getDetail(personaId, settlementId));
     }
 }
