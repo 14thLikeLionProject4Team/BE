@@ -18,6 +18,10 @@ public class Account {
 
     private Long memberId;
 
+    private String bankName;
+
+    private String accountNumber;
+
     /** 계좌 전체 잔액 (지난달까지 남은 돈 포함) */
     private int balance;
 
