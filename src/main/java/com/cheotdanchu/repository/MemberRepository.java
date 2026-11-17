@@ -32,6 +32,18 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
         return member;
     }
 
+    /**
+     * 부모가 고른 우리 가족의 아이. childId 를 안 주면 첫째 아이(지금은 아이 1명)이고,
+     * 다른 가족의 아이거나 아이가 아니면 없는 것과 같이 404 다.
+     */
+    default Member getChildOfFamily(Member parent, Long childId) {
+        Long familyId = parent.getFamily().getFamilyId();
+        Optional<Member> child = childId == null
+                ? findByFamily_FamilyIdAndRole(familyId, Member.Role.CHILD)
+                : findById(childId).filter(m -> m.getRole() == Member.Role.CHILD && m.getFamily().getFamilyId().equals(familyId));
+        return child.orElseThrow(() -> new GeneralException(ErrorStatus.PERSONA_NOT_FOUND));
+    }
+
     /** 부모 전용 API에서 쓴다. 부모가 아니면 403 */
     default Member getParent(Long personaId) {
         Member member = getPersona(personaId);

@@ -30,4 +30,26 @@ public final class MyDtos {
             List<ChildSummary> children) {}
 
     public record ChildSummary(Long memberId, String name) {}
+
+    /** "{아이}와의 약속" 카드. 값은 가족 설정과 용돈 이력에서 읽는다 */
+    public record PromiseResponse(
+            int streakMonths,
+            Allowance allowance,
+            int allowanceDay,
+            boolean autoTransfer,
+            int settlementDay,
+            FamilySetting.Visibility visibility,
+            int missionCapRate,
+            Long missionCapAmount,            // 용돈이 정해지지 않았으면 null
+            Integer cardLimit) {}             // 카드사가 정하므로 보기만 하고, 정해지지 않았으면 null
+
+    /** 현재 용돈과 예정 용돈. 바뀔 예정이 없으면 next·nextEffectiveFrom 은 null */
+    public record Allowance(Integer current, Integer next, LocalDate nextEffectiveFrom) {}
+
+    /** 성년 전환 카드. 전환 전이면 transitioned=false 이고 나머지는 null/false */
+    public record AdultTransitionCard(
+            boolean transitioned,
+            LocalDate at,
+            Long togetherCount,               // 함께한 결제일 횟수 (전환일까지 끝난 정산 수)
+            boolean recordsHidden) {}
 }
