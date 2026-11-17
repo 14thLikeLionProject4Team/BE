@@ -30,6 +30,7 @@ public enum ErrorStatus {
     MISSION_NOT_PROPOSABLE(409, "이미 제안했거나 제안할 수 없는 미션이에요."),
     SUBMISSION_NOT_FOUND(404, "제출 기록을 찾을 수 없습니다"),
     NOTIFICATION_NOT_FOUND(404, "알림을 찾을 수 없습니다"),
+    NOTIFICATION_TYPE_NOT_FOUND(404, "알 수 없는 알림 항목이에요"),
     BRIEFING_NOT_FOUND(404, "브리핑을 찾을 수 없습니다"),
     CERTIFICATE_NOT_FOUND(404, "발급한 확인서가 없어요"),
     CERTIFICATE_NOT_AVAILABLE(409, "지금은 확인서를 발급할 수 없어요"),

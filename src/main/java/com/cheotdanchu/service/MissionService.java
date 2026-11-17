@@ -75,6 +75,7 @@ public class MissionService {
     private final MissionSubmissionRepository submissionRepository;
     private final SubmissionPhotoRepository photoRepository;
     private final NotificationRepository notificationRepository;
+    private final NotificationSender notificationSender;
     private final FamilySettingRepository familySettingRepository;
     private final AllowanceChangeRepository allowanceChangeRepository;
     private final AccountRepository accountRepository;
@@ -140,7 +141,7 @@ public class MissionService {
 
     private void notifyProposed(Member child, Mission mission) {
         memberRepository.findByFamily_FamilyIdAndRole(child.getFamily().getFamilyId(), Member.Role.PARENT)
-                .ifPresent(p -> notificationRepository.save(Notification.of(p, Notification.Type.MISSION_PROPOSED,
+                .ifPresent(p -> notificationSender.send(Notification.of(p, Notification.Type.MISSION_PROPOSED,
                         "아이가 미션을 제안했어요", mission.getTitle(), mission.getMissionId(), demoNow())));
     }
 
@@ -236,7 +237,7 @@ public class MissionService {
     }
 
     private void notifyNewMission(Optional<Member> child, Mission mission) {
-        child.ifPresent(c -> notificationRepository.save(Notification.of(
+        child.ifPresent(c -> notificationSender.send(Notification.of(
                 c, Notification.Type.NEW_MISSION, "새 미션이 열렸어요", mission.getTitle(),
                 mission.getMissionId(), demoNow())));
     }
@@ -352,7 +353,7 @@ public class MissionService {
         childAccount.deposit(reward);
         Transfer transfer = transferRepository.save(
                 Transfer.missionReward(parentAccountId, childAccount.getAccountId(), reward, mission.getMissionId(), now));
-        notificationRepository.save(Notification.of(child.get(), Notification.Type.MISSION_REWARD, "보상이 들어왔어요",
+        notificationSender.send(Notification.of(child.get(), Notification.Type.MISSION_REWARD, "보상이 들어왔어요",
                 String.format(Locale.KOREA, "%s · %,d원", mission.getTitle(), reward), mission.getMissionId(), now));
 
         return new SubmissionReviewDtos.ApproveResponse(submission.getSubmissionId(), submission.getReviewStatus(),
@@ -371,7 +372,7 @@ public class MissionService {
         submission.reject(reason, now);
         mission.afterRejection();
         memberRepository.findByFamily_FamilyIdAndRole(parent.getFamily().getFamilyId(), Member.Role.CHILD)
-                .ifPresent(c -> notificationRepository.save(Notification.of(c, Notification.Type.MISSION_REJECTED,
+                .ifPresent(c -> notificationSender.send(Notification.of(c, Notification.Type.MISSION_REJECTED,
                         "미션을 다시 확인해 주세요", mission.getTitle() + " · " + reason.label, mission.getMissionId(), now)));
 
         return new SubmissionReviewDtos.RejectResponse(submission.getSubmissionId(), submission.getReviewStatus(),
@@ -394,7 +395,7 @@ public class MissionService {
         }
 
         memberRepository.findByFamily_FamilyIdAndRole(child.getFamily().getFamilyId(), Member.Role.PARENT)
-                .ifPresent(p -> notificationRepository.save(Notification.of(p, Notification.Type.MISSION_REMIND,
+                .ifPresent(p -> notificationSender.send(Notification.of(p, Notification.Type.MISSION_REMIND,
                         child.getName() + (KoreanText.hasBatchim(child.getName()) ? "이" : "가") + " 미션 확인을 기다려요",
                         submission.getMission().getTitle(), submission.getSubmissionId(), demoNow())));
     }
