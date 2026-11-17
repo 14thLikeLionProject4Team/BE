@@ -2,10 +2,12 @@ package com.cheotdanchu.common.config;
 
 import jakarta.servlet.MultipartConfigElement;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.servlet.MultipartConfigFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.unit.DataSize;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -14,6 +16,17 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
     private final PhotoStorage photoStorage;
+
+    /** 프론트 주소(쉼표로 여러 개). 배포에서는 환경변수 APP_CORS_ORIGINS 로 Vercel 주소를 넣는다 */
+    @Value("${app.cors-origins:http://localhost:5173,http://localhost:3000}")
+    private String[] corsOrigins;
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOrigins(corsOrigins)
+                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
+    }
 
     /** 저장한 인증 사진을 /uploads/파일명 으로 보여준다 */
     @Override
