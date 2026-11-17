@@ -46,6 +46,12 @@ public enum SuccessStatus {
     ALLOWANCE_SUGGESTION_KEPT(200, "지금 용돈을 유지해요."),
     ALLOWANCE_SETUP_OK(200, "조회 성공"),
     ALLOWANCE_PREVIEW_OK(200, "조회 성공"),
+    CATEGORY_RATIO_OK(200, "조회 성공"),
+    PAYMENT_SUMMARY_OK(200, "조회 성공"),
+    PAYMENT_LIST_OK(200, "조회 성공"),
+    SETTLEMENT_LIST_OK(200, "조회 성공"),
+    SETTLEMENT_DETAIL_OK(200, "조회 성공"),
+    SHORTFALL_PAID(201, "부족분을 갚았어요"),
     MISSION_CAP_UPDATED(200, "미션 상한을 바꿨어요"),
     ALLOWANCE_CHANGE_SAVED(201, "용돈을 저장했어요"),
     ALLOWANCE_SETTING_SAVED(200, "설정을 저장했어요. 용돈 금액은 그대로예요.");

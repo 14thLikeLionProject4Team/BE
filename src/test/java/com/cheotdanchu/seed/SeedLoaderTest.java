@@ -100,6 +100,32 @@ class SeedLoaderTest {
         assertEquals(true, s.get("auto_transfer"));
     }
 
+    // 끝난 정산의 이체(결제일 정산·부족분 갚기·자동 정산)가 해당 정산에 연결돼서 들어가고, 정산이 끝난 시각도 채워진다
+    @Test
+    void 끝난_정산의_이체와_정산이_끝난_시각이_들어간다() {
+        // 가족 A: 끝난 정산 11건마다 결제일 정산 이체 1건, 2026-03 부족분은 자동 정산 1건
+        assertEquals(11, settlementTransfers(1, "SETTLEMENT"));
+        assertEquals(1, settlementTransfers(1, "AUTO_DEDUCT"));
+        assertEquals(0, settlementTransfers(1, "SHORTFALL_PAYMENT"));
+
+        // 가족 B: 끝난 정산 27건, 부족분 갚기 3건 (직접 송금 1, 지난달까지 남은 돈 2)
+        assertEquals(27, settlementTransfers(2, "SETTLEMENT"));
+        assertEquals(3, settlementTransfers(2, "SHORTFALL_PAYMENT"));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM transfers WHERE type = 'SHORTFALL_PAYMENT' AND source = 'DIRECT'", Integer.class));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM transfers WHERE type = 'SHORTFALL_PAYMENT' AND source = 'CARRYOVER'", Integer.class));
+        // 부족분 갚기가 아닌 이체에는 갚은 방식이 없다
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM transfers WHERE type <> 'SHORTFALL_PAYMENT' AND source IS NOT NULL", Integer.class));
+
+        // 끝난 정산은 모두 끝난 시각이 있고, 정산 전인 이번 달은 없다
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM settlements WHERE status = 'COMPLETED' AND resolved_at IS NULL", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM settlements WHERE status <> 'COMPLETED' AND resolved_at IS NOT NULL", Integer.class));
+    }
+
+    private int settlementTransfers(int familyId, String type) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM transfers t JOIN settlements s ON s.settlement_id = t.settlement_id "
+                + "WHERE s.family_id = ? AND t.type = ?", Integer.class, familyId, type);
+    }
+
     private void clearSeededTables() {
         jdbc.update("DELETE FROM card_payments");
         jdbc.update("DELETE FROM transfers");
