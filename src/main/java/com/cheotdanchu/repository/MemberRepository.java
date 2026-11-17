@@ -31,4 +31,11 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
         if (member.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.CHILD_ONLY);
         return member;
     }
+
+    /** 부모 전용 API에서 쓴다. 부모가 아니면 403 */
+    default Member getParent(Long personaId) {
+        Member member = getPersona(personaId);
+        if (member.getRole() != Member.Role.PARENT) throw new GeneralException(ErrorStatus.PARENT_ONLY);
+        return member;
+    }
 }
