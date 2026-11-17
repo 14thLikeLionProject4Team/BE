@@ -41,6 +41,8 @@ public enum SuccessStatus {
     SUBMISSION_APPROVED(200, "보상을 보냈어요."),
     SUBMISSION_REJECTED(200, "아이에게 다시 부탁했어요."),
     SETTLEMENT_CURRENT_OK(200, "조회 성공"),
+    CHILD_HOME_OK(200, "조회 성공"),
+    DAILY_SPENDING_OK(200, "조회 성공"),
     SHORTFALL_CHECK_OK(200, "부족 예상 조회 성공"),
     CHILD_SPENDING_OK(200, "정산 요약 조회 성공"),
     RECORDS_SUMMARY_OK(200, "조회 성공"),
