@@ -7,6 +7,7 @@ import com.cheotdanchu.dto.AllowanceSetupDtos;
 import com.cheotdanchu.dto.AllowanceSuggestionDtos;
 import com.cheotdanchu.entity.AllowanceChange;
 import com.cheotdanchu.entity.AllowanceSuggestion;
+import com.cheotdanchu.service.AllowanceHistoryService;
 import com.cheotdanchu.service.AllowanceSettingService;
 import com.cheotdanchu.service.AllowanceSuggestionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,6 +32,7 @@ public class AllowanceController {
 
     private final AllowanceSuggestionService suggestionService;
     private final AllowanceSettingService settingService;
+    private final AllowanceHistoryService historyService;
 
     @Operation(summary = "AI 용돈 제안 조회",
             description = "부모 전용. 부모 홈 결정 카드와 용돈 정하기 배너가 같이 쓰는 대기 중인 제안과 근거(참고 구간, 물가 상승률, 카테고리별 사용액·변동률). 대기 중인 제안이 없으면 에러가 아니라 data 가 null 입니다.")
@@ -85,5 +87,15 @@ public class AllowanceController {
         // 이력이 새로 생겼으면 201, 금액이 그대로여서 설정만 저장했으면 200
         SuccessStatus status = result.changeId() != null ? SuccessStatus.ALLOWANCE_CHANGE_SAVED : SuccessStatus.ALLOWANCE_SETTING_SAVED;
         return ResponseEntity.status(status.getCode()).body(ApiResponse.onSuccess(status, result));
+    }
+
+    @Operation(summary = "용돈 변경 이력 조회",
+            description = "부모 전용(자녀는 403). 용돈이 바뀐 이력(이전·변경 금액, 이유, 정한 사람, 적용 시작일, 만든 시각)을 최신순으로 보여줍니다. size 는 기본 20(최대 100), cursor 는 이전 응답의 nextCursor 입니다. renegotiationCount 는 이유가 RENEGOTIATION 인 변경의 전체 개수이고, prevAmount 는 처음 정한 용돈이면 null 입니다. 대기 중인 AI 제안은 아직 변경이 아니라서 들어가지 않습니다.")
+    @GetMapping("/allowance/changes")
+    public ApiResponse<AllowanceChangeDtos.HistoryResponse> getHistory(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String cursor) {
+        return ApiResponse.onSuccess(SuccessStatus.ALLOWANCE_HISTORY_OK, historyService.getHistory(personaId, size, cursor));
     }
 }

@@ -1,9 +1,14 @@
 package com.cheotdanchu.repository;
 
 import com.cheotdanchu.entity.AllowanceChange;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.time.YearMonth;
 import java.util.Optional;
 
@@ -18,4 +23,14 @@ public interface AllowanceChangeRepository extends JpaRepository<AllowanceChange
         LocalDate date = month.atDay(Math.min(allowanceDay, month.lengthOfMonth()));
         return findFirstByFamilyIdAndEffectiveFromLessThanEqualOrderByEffectiveFromDescChangeIdDesc(familyId, date);
     }
+
+    /** 이력 한 페이지(최신순). 커서는 (만든 시각, ID) 라 같은 시각이어도 순서가 정해져서 건너뛰거나 겹치지 않는다. 첫 페이지는 커서에 아주 먼 미래 값을 넣는다 */
+    @Query("""
+            select c from AllowanceChange c
+            where c.familyId = :familyId and (c.createdAt < :at or (c.createdAt = :at and c.changeId < :id))
+            order by c.createdAt desc, c.changeId desc
+            """)
+    List<AllowanceChange> page(@Param("familyId") Long familyId, @Param("at") LocalDateTime at, @Param("id") Long id, Pageable pageable);
+
+    long countByFamilyIdAndReason(Long familyId, AllowanceChange.Reason reason);
 }
