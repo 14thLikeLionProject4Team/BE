@@ -28,7 +28,11 @@ public class CertificateEligibilityService {
 
     /** 발급 요건 조회 */
     public CertificateDtos.EligibilityResponse getEligibility(Long personaId) {
-        Member child = memberRepository.getChild(personaId);
+        return getEligibility(memberRepository.getChild(personaId));
+    }
+
+    /** 이미 찾은 자녀의 발급 요건 (발급이 같은 자녀를 다시 조회하지 않게) */
+    public CertificateDtos.EligibilityResponse getEligibility(Member child) {
         LocalDate today = seedRepository.today();
         int verified = recordsService.verifiedCount(child.getFamily().getFamilyId());
 

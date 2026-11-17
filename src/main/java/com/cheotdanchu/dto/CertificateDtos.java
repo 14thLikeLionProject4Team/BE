@@ -1,5 +1,7 @@
 package com.cheotdanchu.dto;
 
+import jakarta.validation.constraints.NotNull;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -28,4 +30,9 @@ public final class CertificateDtos {
             LocalDateTime issuedAt,
             LocalDateTime expiresAt,
             boolean expired) {}
+
+    /** 본인 인증은 시연에서 화면 단계로만 두고, 서버는 끝났는지만 받는다 */
+    public record IssueRequest(@NotNull Boolean identityVerified) {}
+
+    public record IssueResponse(Long certificateId, LocalDateTime issuedAt, LocalDateTime expiresAt) {}
 }

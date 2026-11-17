@@ -12,6 +12,8 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import com.cheotdanchu.dto.RecordsSummaryResponse;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -47,9 +49,28 @@ public class Certificate {
     @JdbcTypeCode(SqlTypes.TINYINT)
     private int shortfallCount;
 
+    /** PDF 파일 이름 (폴더는 CertificateStorage 가 정한다) */
+    private String filePath;
+
     private LocalDateTime issuedAt;
 
     private LocalDateTime expiresAt;
+
+    /** 발급할 때의 지표를 그대로 저장한다 */
+    public static Certificate issue(Long memberId, RecordsSummaryResponse r, String filePath, LocalDateTime issuedAt, LocalDateTime expiresAt) {
+        Certificate c = new Certificate();
+        c.memberId = memberId;
+        c.fullPaidMonths = r.fullPaidMonths();
+        c.totalMonths = r.totalMonths();
+        c.maxStreak = r.maxStreak();
+        c.avgMarginRate = BigDecimal.valueOf(r.avgMarginRate());
+        c.selfResolvedCount = r.selfResolvedCount();
+        c.shortfallCount = r.shortfallCount();
+        c.filePath = filePath;
+        c.issuedAt = issuedAt;
+        c.expiresAt = expiresAt;
+        return c;
+    }
 
     /**
      * 유효기한이 지났는지. 시연 기준일(SeedRepository.today)은 날짜 단위라서 만료일 당일까지는 유효하다.
