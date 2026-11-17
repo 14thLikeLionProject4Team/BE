@@ -13,6 +13,11 @@ final class RecordsCalculator {
     /** 한 달 정산의 결과와, 결제일 시점 잔액·청구액 */
     record Month(Settlement.Result result, long balanceAtDue, long billed) {
 
+        /** 검증된 정산(결과·결제일 잔액·청구액이 채워진 것) 한 건을 지표 계산용 한 달로 바꾼다 */
+        static Month of(Settlement s) {
+            return new Month(s.getResult(), s.getBalanceAtDue(), s.getBilledAmount());
+        }
+
         /** 결제일 여유율 = (결제일 시점 잔액 − 청구액) / 결제일 시점 잔액. 부족한 달은 음수 */
         double marginRate() {
             return (double) (balanceAtDue - billed) / balanceAtDue;

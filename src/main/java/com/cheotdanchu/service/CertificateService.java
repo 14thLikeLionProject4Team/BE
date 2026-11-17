@@ -8,6 +8,7 @@ import com.cheotdanchu.dto.CertificateDtos;
 import com.cheotdanchu.dto.RecordsSummaryResponse;
 import com.cheotdanchu.entity.Certificate;
 import com.cheotdanchu.entity.Member;
+import com.cheotdanchu.entity.Settlement;
 import com.cheotdanchu.repository.CertificateRepository;
 import com.cheotdanchu.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.security.SecureRandom;
 import java.util.HexFormat;
 
@@ -47,6 +49,10 @@ public class CertificateService {
     /** 공유 링크 주소의 앞부분. 링크를 받은 사람이 여는 화면은 이번 범위가 아니라 시연용 주소를 기본값으로 둔다 */
     @Value("${app.share-base-url:https://example.com/certificates/shared/}")
     private String shareBaseUrl;
+
+    /** QR 코드에 담는 진위 확인 주소의 앞부분(뒤에 발급번호가 붙는다). 확인하는 화면은 이번 범위가 아니라 시연용 주소를 기본값으로 둔다 */
+    @Value("${app.certificate-verify-url:https://example.com/certificates/verify/}")
+    private String verifyUrl;
 
     /** 발급하기 전에 확인서에 들어갈 지표. 기록 지표 조회와 같은 계산이고 발급 요건을 채우지 않아도 볼 수 있다 */
     public RecordsSummaryResponse getPreview(Long personaId) {
@@ -75,14 +81,27 @@ public class CertificateService {
             throw new GeneralException(ErrorStatus.CERTIFICATE_ALREADY_ISSUED);
         }
 
-        RecordsSummaryResponse records = recordsService.getSummary(personaId);
+        // 같은 정산 목록 한 번으로 저장할 지표와 PDF 에 넣을 지표를 함께 만들어, 둘이 어긋나지 않게 한다
+        Long familyId = child.getFamily().getFamilyId();
+        List<Settlement> verified = recordsService.verified(familyId);
+        RecordsSummaryResponse records = RecordsCalculator.summarize(verified.stream().map(RecordsCalculator.Month::of).toList());
         LocalDateTime issuedAt = now();
         LocalDateTime expiresAt = issuedAt.plusDays(VALID_DAYS);
-        String fileName = storage.save(pdfWriter.write(child.getName(), records, issuedAt, expiresAt));
-        deleteFileIfRolledBack(fileName);
 
+        // 발급번호에 확인서 ID 가 들어가서, 행을 먼저 저장해 ID 를 받은 뒤 그 번호로 PDF 를 만든다
+        String fileName = storage.newName();
         Certificate saved = certificateRepository.save(Certificate.issue(child.getMemberId(), records, fileName, issuedAt, expiresAt));
+        deleteFileIfRolledBack(fileName);
+        CertificateReport.Identity identity = new CertificateReport.Identity(saved.number(), child.getName(), child.getBirthDate().getYear(),
+                issuedAt.toLocalDate(), expiresAt.toLocalDate());
+        CertificateReport report = CertificateReportCalculator.calculate(verified, recordsService.completedCount(familyId), identity);
+        storage.write(fileName, pdfWriter.write(report, withTrailingSlash(verifyUrl) + saved.number()));
         return new CertificateDtos.IssueResponse(saved.getCertificateId(), saved.getIssuedAt(), saved.getExpiresAt());
+    }
+
+    /** 설정에 마지막 / 가 없어도 뒤에 붙는 값과 이어 붙어 주소가 깨지지 않게 한다 */
+    static String withTrailingSlash(String url) {
+        return url.endsWith("/") ? url : url + "/";
     }
 
     /** 가능일이 아직 오지 않았으면 그 날짜를, 가능일이 오늘이거나 지났는데도 못 채웠으면(정산 지연 등) 날짜 없이 알린다 */
@@ -128,7 +147,7 @@ public class CertificateService {
         }
         String token = newShareToken();
         c.share(token, shareExpiresAt);
-        String base = shareBaseUrl.endsWith("/") ? shareBaseUrl : shareBaseUrl + "/"; // 설정에 마지막 / 가 없어도 주소가 깨지지 않게
+        String base = withTrailingSlash(shareBaseUrl);
         return new CertificateDtos.ShareResponse(base + token, shareExpiresAt);
     }
 

@@ -31,7 +31,7 @@ public class RecordsService {
         if (member.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.CHILD_ONLY);
 
         return RecordsCalculator.summarize(verified(member.getFamily().getFamilyId()).stream()
-                .map(s -> new RecordsCalculator.Month(s.getResult(), s.getBalanceAtDue(), s.getBilledAmount()))
+                .map(RecordsCalculator.Month::of)
                 .toList());
     }
 
@@ -47,13 +47,18 @@ public class RecordsService {
         return streak;
     }
 
+    /** 끝난 정산 전체 수 (제외된 것 포함, 확인서의 검증된 기록 비율 분모) */
+    public long completedCount(Long familyId) {
+        return settlementRepository.countByFamilyIdAndStatus(familyId, Settlement.Status.COMPLETED);
+    }
+
     /** 검증된 결제일 정산 횟수 (확인서 발급 요건) */
     public int verifiedCount(Long familyId) {
         return verified(familyId).size();
     }
 
     /** 끝난 정산 중 제외되지 않고 결과·금액이 채워진 것, 오래된 순 */
-    private List<Settlement> verified(Long familyId) {
+    public List<Settlement> verified(Long familyId) {
         return settlementRepository.findByFamilyIdAndStatusAndExcludedFalseOrderByPeriodEndAsc(familyId, Settlement.Status.COMPLETED)
                 .stream()
                 .filter(s -> s.getResult() != null && s.getBalanceAtDue() != null && s.getBilledAmount() != null)

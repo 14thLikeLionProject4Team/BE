@@ -24,16 +24,19 @@ public class CertificateStorage {
         this.dir = Path.of(dir).toAbsolutePath();
     }
 
-    /** PDF 를 저장하고 DB 에 넣을 파일 이름(폴더는 뺀 것)을 돌려준다 */
-    public String save(byte[] pdf) {
-        String name = UUID.randomUUID() + ".pdf";
+    /** DB 에 넣을 새 파일 이름(폴더는 뺀 것). 파일은 아직 만들지 않는다 */
+    public String newName() {
+        return UUID.randomUUID() + ".pdf";
+    }
+
+    /** newName 으로 받은 이름으로 PDF 를 저장한다 */
+    public void write(String name, byte[] pdf) {
         try {
             Files.createDirectories(dir);
             Files.write(dir.resolve(name), pdf);
         } catch (IOException e) {
             throw new UncheckedIOException("확인서 PDF 를 저장하지 못했어요", e);
         }
-        return name;
     }
 
     /** 저장한 PDF 를 읽는다. 폴더 밖을 가리키거나 파일이 없으면 empty (DB 의 파일 이름이 어긋나도 폴더 밖은 읽지 않는다) */

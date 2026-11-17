@@ -27,6 +27,8 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
 
     long countByFamilyIdAndStatusNot(Long familyId, Settlement.Status excluded);
 
+    long countByFamilyIdAndStatus(Long familyId, Settlement.Status status);
+
     /** 그날(종료일 기준)까지 끝난 정산 수 */
     long countByFamilyIdAndStatusAndPeriodEndLessThanEqual(Long familyId, Settlement.Status status, LocalDate periodEnd);
 
