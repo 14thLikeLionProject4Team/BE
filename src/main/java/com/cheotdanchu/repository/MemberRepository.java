@@ -3,13 +3,22 @@ package com.cheotdanchu.repository;
 import com.cheotdanchu.common.exception.GeneralException;
 import com.cheotdanchu.common.response.ErrorStatus;
 import com.cheotdanchu.entity.Member;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
 public interface MemberRepository extends JpaRepository<Member, Long> {
 
     Optional<Member> findByFamily_FamilyIdAndRole(Long familyId, Member.Role role);
+
+    /** 같은 구성원의 요청이 한 줄로 처리되게(확인서 발급 연타 방지) 행에 쓰기 잠금을 건다 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from Member m where m.memberId = :id")
+    Optional<Member> findByIdForUpdate(@Param("id") Long id);
 
     /** X-Persona-Id로 구성원을 찾는다. 없으면 404 */
     default Member getPersona(Long personaId) {
