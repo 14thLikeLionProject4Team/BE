@@ -3,6 +3,7 @@ package com.cheotdanchu.service;
 import com.cheotdanchu.ai.SeedRepository;
 import com.cheotdanchu.common.exception.GeneralException;
 import com.cheotdanchu.common.response.ErrorStatus;
+import com.cheotdanchu.dto.CurrentSettlementResponse;
 import com.cheotdanchu.dto.PaymentDtos;
 import com.cheotdanchu.entity.Member;
 import com.cheotdanchu.entity.Settlement;
@@ -31,6 +32,7 @@ public class ChildPaymentService {
     private final SettlementRepository settlementRepository;
     private final CardPaymentRepository cardPaymentRepository;
     private final SeedRepository seedRepository;
+    private final SettlementService settlementService;
 
     /** 지금 보는 아이, 이번 정산, 고른 기간(from 이상 to 이하의 날짜). 기간을 안 고르면 정산 기간 전체 */
     private record View(Member child, Settlement settlement, LocalDate from, LocalDate to) {
@@ -90,19 +92,21 @@ public class ChildPaymentService {
         return new PaymentDtos.CategoryRatioResponse(total, items);
     }
 
-    /** 결제 요약: 이번 정산의 청구 예정액(취소 합산)과 결제 건수(취소 제외), 결제일. 진행 중인 정산이 없으면 null */
+    /**
+     * 결제 요약: 이번 정산의 청구 예정액(취소 합산)과 결제 건수(취소 제외), 결제일. 진행 중인 정산이 없으면 null.
+     * 자녀 홈의 현재 정산 조회와 같은 숫자여야 해서 그 계산을 그대로 쓴다 (자녀 확인도 거기서 한다).
+     */
     public PaymentDtos.SummaryResponse getSummary(Long personaId) {
-        Optional<View> view = view(personaId, null, null);
-        if (view.isEmpty()) return null;
-        Settlement settlement = view.get().settlement();
+        CurrentSettlementResponse current = settlementService.getCurrent(personaId);
+        if (current == null) return null;
 
         return new PaymentDtos.SummaryResponse(
-                settlement.getSettlementId(),
-                settlement.getPeriodStart(),
-                settlement.getPeriodEnd(),
-                cardPaymentRepository.sumAmount(settlement.getSettlementId()),
-                cardPaymentRepository.countBySettlementIdAndCanceledFalse(settlement.getSettlementId()),
-                settlement.getDueAt().toLocalDate());
+                current.settlementId(),
+                current.periodStart(),
+                current.periodEnd(),
+                current.billedAmount(),
+                current.paymentCount(),
+                current.dueAt().toLocalDate());
     }
 
     /** 전체 대비 비중(%), 소수 첫째 자리에서 반올림 */
