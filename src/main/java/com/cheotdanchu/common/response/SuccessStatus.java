@@ -36,6 +36,8 @@ public enum SuccessStatus {
     MISSION_CANCELED(200, "미션을 취소했어요."),
     MISSION_REMINDED(200, "부모님께 다시 알림을 보냈어요."),
     RECOMMENDATIONS_OK(200, "추천 미션 목록 조회 성공"),
+    SAVING_TIP_OK(200, "절약 팁 조회 성공"),
+    REWARD_GUIDE_OK(200, "보상 가이드 조회 성공"),
     RECOMMENDATION_PROPOSED(200, "부모님께 미션을 제안했어요."),
     MISSION_SUBMITTED(201, "완료를 제출했어요. 부모님 확인을 기다려요."),
     SUBMISSION_APPROVED(200, "보상을 보냈어요."),

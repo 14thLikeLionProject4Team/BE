@@ -65,6 +65,10 @@ public class MissionService {
             EnumSet.of(Mission.Status.COMPLETED, Mission.Status.CANCELED, Mission.Status.EXPIRED);
     private static final int ENDED_PAGE_SIZE = 20;
     private static final int RECOMMENDATION_PAGE_SIZE = 10;
+    private static final int GUIDE_MIN_RATE = 3;
+    private static final int GUIDE_MAX_RATE = 8;
+    private static final int MIN_GUIDE_REWARD = 100;
+    private static final List<Integer> QUICK_CHIPS = List.of(500, 1000, 3000);
 
     private final MemberRepository memberRepository;
     private final MissionRepository missionRepository;
@@ -247,7 +251,7 @@ public class MissionService {
     }
 
     /** 이번 정산 기간 보상 한도와 받은 보상. 정산 기간 끝나는 달의 용돈 기준이고, 데모 기준일 화면 숫자와 같다 */
-    record RewardCap(YearMonth month, int rate, long cap, long received) {
+    record RewardCap(YearMonth month, int allowance, int rate, long cap, long received) {
         long remaining() {
             return Math.max(cap - received, 0);
         }
@@ -273,7 +277,32 @@ public class MissionService {
                         current.get().getPeriodStart().atStartOfDay(),
                         current.get().getPeriodEnd().plusDays(1).atStartOfDay()))
                 .orElse(0L);
-        return Optional.of(new RewardCap(month, setting.getMissionCapRate(), cap, received));
+        return Optional.of(new RewardCap(month, allowance, setting.getMissionCapRate(), cap, received));
+    }
+
+    /**
+     * 미션 보상 참고 구간(이번 정산 기간 용돈의 3~8%, 100원 단위 내림, 최소 100원)과 이번 달 남은 한도. 미션 만들기·미션 제안 화면이 같이 쓴다.
+     * 구간은 남은 한도를 넘지 않게 자른다 (넘는 금액을 고르면 미션 생성·승인에서 막힌다). 남은 한도가 0원이면 구간도 0원.
+     * 용돈 기준과 남은 한도는 월 보상 합계·한도 검사와 같은 계산이라 화면 숫자가 서로 같다. 용돈 설정이 없으면 금액은 null
+     */
+    public MissionQueryDtos.RewardGuideResponse getRewardGuide(Long personaId) {
+        Member member = memberRepository.getPersona(personaId);
+        Long familyId = member.getFamily().getFamilyId();
+        return rewardCap(familyId, childOf(member)).map(c -> {
+                    long max = Math.min(guideAmount(c.allowance(), GUIDE_MAX_RATE), floorTo100(c.remaining()));
+                    long min = Math.min(guideAmount(c.allowance(), GUIDE_MIN_RATE), max);
+                    return new MissionQueryDtos.RewardGuideResponse(c.allowance(), GUIDE_MIN_RATE, GUIDE_MAX_RATE, (int) min, (int) max, c.remaining(), QUICK_CHIPS);
+                })
+                .orElseGet(() -> new MissionQueryDtos.RewardGuideResponse(null, GUIDE_MIN_RATE, GUIDE_MAX_RATE, null, null, null, QUICK_CHIPS));
+    }
+
+    /** 용돈의 rate%를 100원 단위로 내리고, 최소 100원 */
+    private static long guideAmount(int allowance, int rate) {
+        return Math.max(floorTo100((long) allowance * rate / 100), MIN_GUIDE_REWARD);
+    }
+
+    private static long floorTo100(long amount) {
+        return amount / 100 * 100;
     }
 
     @Transactional

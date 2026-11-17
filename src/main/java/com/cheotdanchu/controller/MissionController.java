@@ -14,6 +14,7 @@ import com.cheotdanchu.dto.MissionSubmitResponse;
 import com.cheotdanchu.dto.SubmissionReviewDtos;
 import com.cheotdanchu.entity.Mission;
 import com.cheotdanchu.service.MissionService;
+import com.cheotdanchu.service.SavingTipService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ import java.util.Locale;
 public class MissionController {
 
     private final MissionService missionService;
+    private final SavingTipService savingTipService;
 
     @Operation(summary = "미션 목록 (진행 중 / 제안 / 종료)",
             description = "status=active: NEW·IN_PROGRESS·SUBMITTED 미션과 진행률. "
@@ -65,6 +67,12 @@ public class MissionController {
             @RequestParam String status) {
         if (!"PENDING".equals(status)) throw new GeneralException(ErrorStatus.INVALID_SUBMISSION_STATUS);
         return ApiResponse.onSuccess(SuccessStatus.PENDING_SUBMISSIONS_OK, missionService.getPendingSubmissions(personaId));
+    }
+
+    @Operation(summary = "보상 가이드 조회", description = "자녀·부모 공용. 미션 보상 참고 구간(이번 정산 기간 용돈의 3~8%, 100원 단위 내림)과 이번 달 남은 한도, 빠른 선택 금액. 미션 만들기와 미션 제안 화면이 같이 쓴다. 용돈 설정이 없으면 금액은 null.")
+    @GetMapping("/missions/reward-guide")
+    public ApiResponse<MissionQueryDtos.RewardGuideResponse> getRewardGuide(@RequestHeader("X-Persona-Id") Long personaId) {
+        return ApiResponse.onSuccess(SuccessStatus.REWARD_GUIDE_OK, missionService.getRewardGuide(personaId));
     }
 
     @Operation(summary = "월 보상 합계 조회", description = "이번 정산 기간에 받은 미션 보상과 한 달 상한(용돈 × 상한 비율), 남은 한도. 자녀·부모 공용.")
@@ -170,6 +178,12 @@ public class MissionController {
             @RequestHeader("X-Persona-Id") Long personaId,
             @PathVariable Long missionId) {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_CANCELED, missionService.cancelMission(personaId, missionId));
+    }
+
+    @Operation(summary = "절약 팁 조회", description = "자녀 전용. 이번 정산 기간 결제에서 가장 많이 쓴 항목으로 만든 절약 팁 한 줄. 부족 예상 카드가 떠 있으면 몇 번 줄이면 부족분이 채워지는지 알려준다. link는 결제 내역 이동용 필터(항목, 금액순). 진행 중인 정산이나 결제가 없으면 data null.")
+    @GetMapping("/missions/saving-tip")
+    public ApiResponse<MissionQueryDtos.SavingTip> getSavingTip(@RequestHeader("X-Persona-Id") Long personaId) {
+        return ApiResponse.onSuccess(SuccessStatus.SAVING_TIP_OK, savingTipService.getSavingTip(personaId));
     }
 
     @Operation(summary = "추천 미션 목록", description = "자녀·부모 공용. target=CHILD(자녀 화면) | PARENT(부모 화면), 내 역할과 같아야 한다(다르면 400). 10개씩, cursor는 이전 페이지의 nextCursor. 부모 화면 추천은 '제안·추천 미션 오픈'으로 열고, 자녀 화면 추천은 '추천 미션 제안'으로 부모에게 제안한다.")

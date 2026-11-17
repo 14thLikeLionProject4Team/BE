@@ -31,7 +31,8 @@ public interface CardPaymentRepository extends JpaRepository<CardPayment, Long> 
 
     /** 카테고리별 합계, 큰 금액순. 취소(마이너스)를 합산해서 전체 합이 청구 예정액과 같고, 합계가 0 이하가 된 카테고리는 뺀다. from 이상 to 미만 */
     @Query("""
-            select p.category as category, sum(p.amount) as amount
+            select p.category as category, sum(p.amount) as amount,
+                   sum(case when p.canceled = true then -1L else 1L end) as count
             from CardPayment p
             where p.settlementId = :settlementId and p.memberId = :memberId and p.paidAt >= :from and p.paidAt < :to
             group by p.category
@@ -45,6 +46,9 @@ public interface CardPaymentRepository extends JpaRepository<CardPayment, Long> 
         String getCategory();
 
         Long getAmount();
+
+        /** 실제 결제 횟수: 취소는 원결제와 따로 마이너스 행으로 남으니 취소 행만큼 뺀다 (countNetPayments와 같은 방식) */
+        Long getCount();
     }
 
     /** 날짜별 합계(취소는 마이너스로 합산). 결제가 없는 날은 행이 없다. from 이상 to 미만 */

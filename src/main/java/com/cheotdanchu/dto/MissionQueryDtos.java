@@ -26,6 +26,22 @@ public final class MissionQueryDtos {
 
     public record EndedListResponse(List<EndedMission> missions, Long nextCursor) {}
 
+    /** 보상 참고 구간(용돈 × minRate~maxRate%)과 이번 달 남은 한도. 용돈 설정이 없으면 금액은 null */
+    public record RewardGuideResponse(
+            Integer allowanceAmount,
+            int minRate,
+            int maxRate,
+            Integer minReward,
+            Integer maxReward,
+            Long remainingCap,
+            List<Integer> quickChips
+    ) {}
+
+    /** 절약 팁 한 줄과, 누르면 이동할 결제 내역 필터 (항목, 정렬) */
+    public record SavingTip(String text, SavingTipLink link) {}
+
+    public record SavingTipLink(String category, String sort) {}
+
     public record RecommendationListResponse(List<Recommendation> recommendations, Long nextCursor) {}
 
     /** badge는 아직 정하는 기준이 없어 null */
