@@ -154,6 +154,7 @@ CREATE TABLE transfers (
   amount          INT      NOT NULL COMMENT '금액',
   settlement_id   BIGINT   NULL     COMMENT '정산 아이디',
   mission_id      BIGINT   NULL     COMMENT '미션 아이디',
+  source          ENUM('CARRYOVER','DIRECT') NULL COMMENT '부족분을 갚은 방식 (남은 돈 / 직접 송금)',
   transferred_at  DATETIME NOT NULL COMMENT '이체 일시',
   PRIMARY KEY (transfer_id),
   FOREIGN KEY (from_account_id) REFERENCES accounts (account_id),

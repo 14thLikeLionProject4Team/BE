@@ -29,6 +29,12 @@ public class Transfer {
 
     private Long missionId;
 
+    private Long settlementId;
+
+    /** 부족분 갚기(SHORTFALL_PAYMENT)에서만 값이 있다: 남은 돈 / 직접 송금 */
+    @Enumerated(EnumType.STRING)
+    private Source source;
+
     private LocalDateTime transferredAt;
 
     public static Transfer missionReward(Long fromAccountId, Long toAccountId, int amount, Long missionId, LocalDateTime at) {
@@ -43,4 +49,7 @@ public class Transfer {
     }
 
     public enum Type { ALLOWANCE, SETTLEMENT, SHORTFALL_PAYMENT, AUTO_DEDUCT, MISSION_REWARD, PARENT_SUPPORT }
+
+    /** 부족분을 갚은 방식: 지난달까지 남은 돈 / 부모 계좌로 직접 송금 */
+    public enum Source { CARRYOVER, DIRECT }
 }
