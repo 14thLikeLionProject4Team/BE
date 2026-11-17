@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.Period;
 
 @Entity
 @Table(name = "members")
@@ -42,6 +43,16 @@ public class Member {
 
     public boolean isAdultOn(LocalDate today) {
         return !adultDay().isAfter(today);
+    }
+
+
+    /**
+     * 만 나이. 윤년 2월 29일생은 평년에 2월 28일에 한 살을 먹는 것으로 보아, 성년 전환일(adultDay)과 어긋나지 않게 한다
+     * (Period 만 쓰면 2월 28일에 성년 전환이 됐는데도 만 18세로 나온다).
+     */
+    public int ageOn(LocalDate today) {
+        int age = Period.between(birthDate, today).getYears();
+        return birthDate.plusYears(age + 1L).isAfter(today) ? age : age + 1;
     }
 
     public enum Role { PARENT, CHILD }
