@@ -6,6 +6,8 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 
 /** 용돈 변경 저장의 요청과 응답 */
 public final class AllowanceChangeDtos {
@@ -39,4 +41,17 @@ public final class AllowanceChangeDtos {
             Integer diff,
             LocalDate effectiveFrom
     ) {}
+
+    /** 용돈 변경 이력. renegotiationCount 는 이유가 RENEGOTIATION 인 변경의 전체 개수(페이지와 상관없음) */
+    public record HistoryResponse(int renegotiationCount, List<HistoryItem> items, String nextCursor) {}
+
+    /** prevAmount 는 처음 정한 용돈이면 null */
+    public record HistoryItem(
+            Long changeId,
+            Integer prevAmount,
+            int amount,
+            AllowanceChange.Reason reason,
+            AllowanceChange.Source source,
+            LocalDate effectiveFrom,
+            LocalDateTime createdAt) {}
 }

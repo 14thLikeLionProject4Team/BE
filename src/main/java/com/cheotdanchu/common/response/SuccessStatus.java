@@ -63,6 +63,7 @@ public enum SuccessStatus {
     ALLOWANCE_SUGGESTION_KEPT(200, "지금 용돈을 유지해요."),
     ALLOWANCE_SETUP_OK(200, "조회 성공"),
     ALLOWANCE_PREVIEW_OK(200, "조회 성공"),
+    ALLOWANCE_HISTORY_OK(200, "조회 성공"),
     CATEGORY_RATIO_OK(200, "조회 성공"),
     PAYMENT_SUMMARY_OK(200, "조회 성공"),
     PAYMENT_LIST_OK(200, "조회 성공"),
