@@ -6,7 +6,6 @@ import com.cheotdanchu.entity.Member;
 import com.cheotdanchu.entity.Notification;
 import com.cheotdanchu.repository.AllowanceChangeRepository;
 import com.cheotdanchu.repository.MemberRepository;
-import com.cheotdanchu.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,7 +27,7 @@ public class AllowanceChangeService {
 
     private final AllowanceChangeRepository allowanceChangeRepository;
     private final MemberRepository memberRepository;
-    private final NotificationRepository notificationRepository;
+    private final NotificationSender notificationSender;
     private final SeedRepository seedRepository;
 
     /** 지금 정하면 적용되는 날. 정산 기간 중간에는 바꾸지 않으므로 다음 달 1일이다 */
@@ -62,7 +61,7 @@ public class AllowanceChangeService {
                 AllowanceChange.of(familyId, prevAmount, amount, effectiveFrom, reason, source, now));
 
         memberRepository.findByFamily_FamilyIdAndRole(familyId, Member.Role.CHILD)
-                .ifPresent(child -> notificationRepository.save(Notification.of(
+                .ifPresent(child -> notificationSender.send(Notification.of(
                         child, Notification.Type.ALLOWANCE_CHANGED, "용돈이 바뀌어요",
                         message(effectiveFrom, amount, prevAmount, reason), change.getChangeId(), now)));
         return change;

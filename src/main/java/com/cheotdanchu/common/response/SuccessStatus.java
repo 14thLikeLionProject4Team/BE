@@ -71,6 +71,8 @@ public enum SuccessStatus {
     SETTLEMENT_DETAIL_OK(200, "조회 성공"),
     SHORTFALL_PAID(201, "부족분을 갚았어요"),
     MISSION_CAP_UPDATED(200, "미션 상한을 바꿨어요"),
+    NOTIFICATION_SETTINGS_OK(200, "조회 성공"),
+    NOTIFICATION_SETTING_UPDATED(200, "알림 설정을 바꿨어요"),
     VISIBILITY_OK(200, "조회 성공"),
     VISIBILITY_UPDATED(200, "열람 범위를 바꿨어요"),
     ALLOWANCE_CHANGE_SAVED(201, "용돈을 저장했어요"),
