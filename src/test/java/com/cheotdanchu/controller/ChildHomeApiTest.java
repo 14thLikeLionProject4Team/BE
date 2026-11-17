@@ -14,6 +14,7 @@ import java.util.List;
 
 import static com.cheotdanchu.controller.CardPaymentFixture.insert;
 import static com.cheotdanchu.controller.CardPaymentFixture.insertCanceled;
+import static com.cheotdanchu.controller.SettlementFixture.completeCurrentSettlement;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -104,23 +105,17 @@ class ChildHomeApiTest {
         home(2).andExpect(jsonPath("$.data.chips.certificateDDay").value(6));
     }
 
-    /** 이번 정산까지 끝나서 검증된 정산이 12회가 된 상태로 만든다 */
-    private void completeCurrentSettlement() {
-        jdbc.update("UPDATE settlements SET status = 'COMPLETED', result = 'FULL_PAID', billed_amount = 79500, balance_at_due = 90000 "
-                + "WHERE family_id = 1 AND '2026-10-19' BETWEEN period_start AND period_end");
-    }
-
     @Test
-    void 정산_12회를_채웠고_오늘이_생일이면_D0을_준다() throws Exception {
-        completeCurrentSettlement();
-        jdbc.update("UPDATE members SET birth_date = '2007-10-19' WHERE member_id = 2");
+    void 정산이_지연돼_추정일이_지났으면_아직인데_D0을_준다() throws Exception {
+        jdbc.update("UPDATE members SET birth_date = '2000-01-01' WHERE member_id = 2");
+        jdbc.update("UPDATE settlements SET due_at = '2026-10-18 18:00:00' WHERE family_id = 1 AND '2026-10-19' BETWEEN period_start AND period_end");
 
-        home(2).andExpect(jsonPath("$.data.chips.certificateDDay").value(0));
+        home(2).andExpect(jsonPath("$.data.chips.certificateDDay").value(0)); // 12회째가 아직 안 끝났으니 가능일을 오늘로 둔다
     }
 
     @Test
     void 정산_12회를_채웠고_생일이_지났으면_null이다() throws Exception {
-        completeCurrentSettlement();
+        completeCurrentSettlement(jdbc);
         jdbc.update("UPDATE members SET birth_date = '2000-01-01' WHERE member_id = 2");
 
         home(2).andExpect(jsonPath("$.data.chips.certificateDDay").value(nullValue()));
@@ -128,7 +123,7 @@ class ChildHomeApiTest {
 
     @Test
     void 이번_정산이_이미_끝났어도_다음_정산부터_센다() throws Exception {
-        completeCurrentSettlement();
+        completeCurrentSettlement(jdbc);
         jdbc.update("UPDATE settlements SET is_excluded = TRUE WHERE family_id = 1 AND status = 'COMPLETED' "
                 + "AND period_end < '2026-10-25' ORDER BY period_end DESC LIMIT 1"); // 제외돼서 검증된 정산이 11회
         jdbc.update("UPDATE members SET birth_date = '2000-01-01' WHERE member_id = 2");

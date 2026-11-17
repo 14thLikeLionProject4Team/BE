@@ -52,14 +52,14 @@ public class ChildHomeService {
         Long familyId = child.getFamily().getFamilyId();
         LocalDate today = seedRepository.today();
 
-        long certificateDays = ChronoUnit.DAYS.between(today, certificateEligibilityService.availableFrom(child, today));
+        LocalDate certificateFrom = certificateEligibilityService.availableFrom(child, today);
         FamilySetting.Visibility visibility = familySettingRepository.visibilityOf(familyId);
 
         return new ChildHomeDtos.HomeResponse(
                 today,
                 new ChildHomeDtos.Member(child.getMemberId(), child.getName()),
                 new ChildHomeDtos.Chips(recordsService.currentStreak(familyId),
-                        certificateDays >= 0 ? certificateDays : null, visibility),
+                        certificateFrom == null ? null : ChronoUnit.DAYS.between(today, certificateFrom), visibility),
                 settlement,
                 shortfallCheckShow);
     }

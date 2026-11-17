@@ -21,7 +21,7 @@ public final class ChildHomeDtos {
     /** 상태 칩 3개의 값. 문구는 화면에서 만든다 */
     public record Chips(
             int streakMonths,        // 지금까지 이어진 연속 완납 개월 수 (0이면 칩을 숨긴다)
-            Long certificateDDay,    // 확인서 발급 가능일까지 남은 날. 오늘이 그날이면 0, 이미 발급할 수 있으면 null
+            Long certificateDDay,    // 확인서 발급 가능일까지 남은 날. 발급 요건이 모두 채워졌으면 null. 아직인데 날짜가 지난 경우(정산 지연 등)는 0
             FamilySetting.Visibility visibility) {}
 
     public record DailySpendingResponse(

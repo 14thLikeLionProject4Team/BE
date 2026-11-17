@@ -15,6 +15,12 @@ final class SettlementFixture {
         return jdbc.queryForObject("SELECT settlement_id FROM settlements WHERE family_id = 1 AND period_end = '2026-10-25'", Long.class);
     }
 
+    /** 이번 정산까지 끝나서(완납) 검증된 정산이 12회가 된 상태로 만든다 */
+    static void completeCurrentSettlement(JdbcTemplate jdbc) {
+        jdbc.update("UPDATE settlements SET status = 'COMPLETED', result = 'FULL_PAID', billed_amount = 79500, balance_at_due = 90000 "
+                + "WHERE family_id = 1 AND '2026-10-19' BETWEEN period_start AND period_end");
+    }
+
     /** 결제일 정산 이체를 넣는다 (루피 계좌 → 부모 계좌). at 은 이체 시각 */
     static void insertSettlementTransfer(JdbcTemplate jdbc, long settlementId, int amount, String at) {
         jdbc.update("INSERT INTO transfers (from_account_id, to_account_id, type, amount, settlement_id, transferred_at) "

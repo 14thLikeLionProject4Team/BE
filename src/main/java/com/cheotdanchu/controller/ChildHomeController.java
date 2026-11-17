@@ -17,7 +17,7 @@ public class ChildHomeController {
     private final ChildHomeService childHomeService;
 
     @Operation(summary = "자녀 홈 조회",
-            description = "자녀 전용(부모는 403). 오늘 날짜, 상태 칩 값(streakMonths 연속 완납 개월, certificateDDay 확인서 발급 가능일까지 남은 날·오늘이 그날이면 0·이미 가능하면 null, visibility 열람 범위), 이번 정산(현재 정산 조회와 같은 값), 부족 예상 점검 카드를 보일지. 진행 중인 정산이 없으면 settlement 는 null 이고 shortfallCheckShow 는 false 입니다.")
+            description = "자녀 전용(부모는 403). 오늘 날짜, 상태 칩 값(streakMonths 연속 완납 개월, certificateDDay 확인서 발급 가능일까지 남은 날·이미 발급 가능하면 null·아직인데 추정일이 지났으면 0, visibility 열람 범위), 이번 정산(현재 정산 조회와 같은 값), 부족 예상 점검 카드를 보일지. 진행 중인 정산이 없으면 settlement 는 null 이고 shortfallCheckShow 는 false 입니다.")
     @GetMapping("/child/home")
     public ApiResponse<ChildHomeDtos.HomeResponse> getHome(@RequestHeader("X-Persona-Id") Long personaId) {
         return ApiResponse.onSuccess(SuccessStatus.CHILD_HOME_OK, childHomeService.getHome(personaId));
