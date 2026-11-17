@@ -182,6 +182,14 @@ class ChildPaymentListApiTest {
         list("amount", null, cursorOf("a|1000")).andExpect(status().isBadRequest());              // 조각이 모자람
     }
 
+    // 연도가 DB 가 받는 범위(1~9999)를 벗어난 시각을 그대로 쿼리에 넣으면 DB 오류(500)가 된다
+    @Test
+    void 연도가_범위를_벗어난_날짜_커서는_500이_아니라_400이다() throws Exception {
+        list("date", null, cursorOf("d|+99999-01-01T00:00|1")).andExpect(status().isBadRequest());
+        list("date", null, cursorOf("d|-0001-01-01T00:00|1")).andExpect(status().isBadRequest());
+        list("date", null, cursorOf("d|9999-12-31T00:00|1")).andExpect(status().isOk()); // 범위의 끝은 허용
+    }
+
     @Test
     void from이나_to_하나만_줘도_그_범위만_센다() throws Exception {
         String middle = jdbc.queryForObject(

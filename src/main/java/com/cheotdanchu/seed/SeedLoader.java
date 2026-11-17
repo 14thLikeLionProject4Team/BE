@@ -30,13 +30,14 @@ import java.util.Map;
  *
  * 지금은 정산 조회·부족 예상 점검·부모 홈 정산 요약에 필요한 것만 넣는다.
  *  - accounts: 부모·자녀 계좌 (자녀 balance = 이번 달 쓸 수 있는 돈 + 지난달까지 남은 돈)
- *  - settlements: 월별 정산 이력 (진행 중인 달은 청구액을 비워 두고 카드 결제에서 계산)
+ *  - settlements: 월별 정산 이력 (진행 중인 달은 청구액을 비워 두고 카드 결제에서 계산). 끝난 달은 정산이 끝난 시각(resolved_at)도 넣는다
  *  - family_settings: 용돈 보내는 날·결제일·미션 상한 비율·카드 한도
  *  - allowance_changes: 용돈 변경 이력
  *  - allowance_suggestions: 시드에서 아직 적용 전인 AI 제안(11월 73,000원)은 이력이 아니라 "대기 중인 제안"으로 넣는다.
  *    시연에서 "다음 달부터 적용"·"유지" 버튼을 눌러 볼 수 있게 하려는 것이고, seed.json 은 AI 쪽도 읽어서 건드리지 않는다
+ *  - transfers(정산): 끝난 정산의 결제일 정산·부족분 갚기(남은 돈/직접 송금 구분)·자동 정산을 해당 정산에 연결해서 넣는다
  *  - card_payments, transfers(용돈·미션 보상 입금): 진행 중인 정산 기간 것만
- * 과거 결제·취소·상환 등은 해당 API를 만들 때 추가한다.
+ * 과거 결제·취소 등은 해당 API를 만들 때 추가한다.
  *
  * families / members 는 data.sql 이 넣는다. 가족은 이름("가족 A")으로 찾는다.
  */
@@ -105,8 +106,10 @@ public class SeedLoader implements ApplicationRunner {
         LocalTime settleTime = LocalTime.parse(str(rules.get("settle_time")));
         String openCycle = null;
         Long settlementId = null;
+        Map<String, Long> settlementByCycle = new HashMap<>();
         for (Map<String, Object> m : (List<Map<String, Object>>) reference.get("monthly")) {
             long id = insertSettlement(familyId, m, settleTime);
+            settlementByCycle.put(str(m.get("cycle")), id);
             if (isOpen(m)) {
                 openCycle = str(m.get("cycle"));
                 settlementId = id;
@@ -116,6 +119,7 @@ public class SeedLoader implements ApplicationRunner {
         insertFamilySettings(familyId, rules, (Map<String, Object>) seed.get("card"));
         insertAllowanceChanges(familyId, str(((Map<String, Object>) seed.get("child")).get("name")),
                 (List<Map<String, Object>>) seed.get("allowance_history"), LocalDate.parse(str(today.get("date"))));
+        insertSettlementHistory((List<Map<String, Object>>) seed.get("ledger"), settlementByCycle, parentAccountId, childAccountId);
         if (settlementId == null) return; // 진행 중인 정산이 없는 가족 (성년 전환 후)
 
         // 취소·상환 등은 해당 API를 만들 때 추가
@@ -136,6 +140,51 @@ public class SeedLoader implements ApplicationRunner {
                 + "VALUES (?, ?, ?, ?, ?, FALSE, ?)", payments);
         jdbc.batchUpdate("INSERT INTO transfers (from_account_id, to_account_id, type, amount, transferred_at) "
                 + "VALUES (?, ?, ?, ?, ?)", transfers);
+    }
+
+    /**
+     * 끝난 정산의 이체를 해당 정산에 연결해서 넣는다: 결제일 정산(SETTLEMENT), 부족분 송금(SHORTFALL_REPAY → SHORTFALL_PAYMENT),
+     * 자동 정산(AUTO_RECOVERY → AUTO_DEDUCT). 부족분은 그 부족이 생긴 달(for_cycle)의 정산에 붙인다.
+     * 정산이 끝난 시각(resolved_at)도 여기서 채운다: 완납은 결제일 정산 시각, 부족분을 갚은 달은 갚거나 자동 정산된 시각.
+     * 용돈·미션 보상 이체는 정산에 연결되지 않으므로 여기서 넣지 않는다.
+     */
+    private void insertSettlementHistory(List<Map<String, Object>> ledger, Map<String, Long> settlementByCycle,
+                                         long parentAccountId, long childAccountId) {
+        List<Object[]> transfers = new ArrayList<>();
+        Map<String, Timestamp> settledAt = new HashMap<>();
+        Map<String, Timestamp> resolvedAt = new HashMap<>();
+        for (Map<String, Object> l : ledger) {
+            String type = str(l.get("type"));
+            // 결제일 정산은 그 달(cycle)의 정산에, 부족분 갚기·자동 정산은 부족이 생긴 달(for_cycle)의 정산에 붙인다
+            String cycle = "SETTLEMENT".equals(type) ? str(l.get("cycle")) : str(l.get("for_cycle"));
+            Long settlementId = settlementByCycle.get(cycle);
+            if (settlementId == null) continue;
+
+            Timestamp at = Timestamp.valueOf(LocalDate.parse(str(l.get("date"))).atTime(LocalTime.parse(str(l.get("time")))));
+            switch (type) {
+                case "SETTLEMENT" -> {
+                    transfers.add(new Object[]{childAccountId, parentAccountId, "SETTLEMENT", intOf(l, "amount"), settlementId, null, at});
+                    settledAt.put(cycle, at);
+                }
+                case "SHORTFALL_REPAY" -> {
+                    // 지난달까지 남은 돈에서 보냈으면 CARRYOVER, 이번 달 쓸 수 있는 돈에서 직접 보냈으면 DIRECT
+                    String source = str(l.get("from")).contains("지난달까지 남은 돈") ? "CARRYOVER" : "DIRECT";
+                    transfers.add(new Object[]{childAccountId, parentAccountId, "SHORTFALL_PAYMENT", intOf(l, "amount"), settlementId, source, at});
+                    resolvedAt.put(cycle, at);
+                }
+                case "AUTO_RECOVERY" -> {
+                    transfers.add(new Object[]{childAccountId, parentAccountId, "AUTO_DEDUCT", intOf(l, "amount"), settlementId, null, at});
+                    resolvedAt.put(cycle, at);
+                }
+                default -> { }
+            }
+        }
+        jdbc.batchUpdate("INSERT INTO transfers (from_account_id, to_account_id, type, amount, settlement_id, source, transferred_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?)", transfers);
+
+        List<Object[]> resolved = new ArrayList<>();
+        settledAt.forEach((cycle, at) -> resolved.add(new Object[]{resolvedAt.getOrDefault(cycle, at), settlementByCycle.get(cycle)}));
+        jdbc.batchUpdate("UPDATE settlements SET resolved_at = ? WHERE settlement_id = ?", resolved);
     }
 
     /** 자동이체 여부·공개 범위는 컬럼 기본값(켜짐·총액만)을 쓴다. 미션 상한 비율은 시드의 0.3 을 30(%)으로 바꿔 넣는다 */

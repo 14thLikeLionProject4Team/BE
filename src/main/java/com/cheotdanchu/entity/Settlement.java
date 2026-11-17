@@ -30,6 +30,12 @@ public class Settlement {
     private Integer billedAmount;
     private Integer balanceAtDue;
 
+    /** 결제일에 이체된 금액 (부족했다면 청구액보다 작다) */
+    private int paidAmount;
+
+    /** 정산이 끝난 시각. 완납은 결제일 정산 시각, 부족분을 갚았거나 자동 정산됐으면 그 시각. 끝나지 않았으면 null */
+    private LocalDateTime resolvedAt;
+
     @Enumerated(EnumType.STRING)
     private Result result;
 
