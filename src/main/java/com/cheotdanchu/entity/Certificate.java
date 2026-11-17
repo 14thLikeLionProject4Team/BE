@@ -56,6 +56,16 @@ public class Certificate {
 
     private LocalDateTime expiresAt;
 
+    /** 공유 링크 토큰. 확인서마다 하나라서 새로 만들면 이전 링크는 못 쓴다 */
+    private String shareToken;
+
+    private LocalDateTime shareExpiresAt;
+
+    public void share(String token, LocalDateTime expiresAt) {
+        this.shareToken = token;
+        this.shareExpiresAt = expiresAt;
+    }
+
     /** 발급할 때의 지표를 그대로 저장한다 */
     public static Certificate issue(Long memberId, RecordsSummaryResponse r, String filePath, LocalDateTime issuedAt, LocalDateTime expiresAt) {
         Certificate c = new Certificate();

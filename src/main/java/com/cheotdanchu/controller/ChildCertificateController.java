@@ -72,4 +72,15 @@ public class ChildCertificateController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(file.fileName()).build().toString())
                 .body(file.content());
     }
+
+    @Operation(summary = "확인서 공유 링크 생성",
+            description = "자녀 전용(부모는 403). 본인의 유효한 확인서에 기한이 있는 공유 링크를 만듭니다. expiresInHours(1~168)만큼 유효하고 확인서 유효기한을 넘길 수 없습니다(400). 남의 확인서·없는 확인서는 404, 만료된 확인서는 410. 확인서마다 링크는 하나라서 다시 만들면 이전 링크는 못 씁니다. 링크를 받은 사람이 여는 화면은 이번 범위에서 제외입니다.")
+    @PostMapping("/child/certificates/{certificateId}/share")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<CertificateDtos.ShareResponse> share(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long certificateId,
+            @Valid @RequestBody CertificateDtos.ShareRequest request) {
+        return ApiResponse.onSuccess(SuccessStatus.CERTIFICATE_SHARED, certificateService.share(personaId, certificateId, request.expiresInHours()));
+    }
 }

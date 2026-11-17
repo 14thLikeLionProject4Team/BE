@@ -49,6 +49,7 @@ public enum SuccessStatus {
     CERTIFICATE_PREVIEW_OK(200, "조회 성공"),
     CERTIFICATE_LATEST_OK(200, "조회 성공"),
     CERTIFICATE_ISSUED(201, "확인서를 발급했어요"),
+    CERTIFICATE_SHARED(201, "공유 링크를 만들었어요"),
     SHORTFALL_CHECK_OK(200, "부족 예상 조회 성공"),
     CHILD_SPENDING_OK(200, "정산 요약 조회 성공"),
     RECORDS_SUMMARY_OK(200, "조회 성공"),
