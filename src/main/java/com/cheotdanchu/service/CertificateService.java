@@ -92,6 +92,20 @@ public class CertificateService {
         });
     }
 
+    /**
+     * 발급한 확인서를 PDF 로 내려준다. 본인 확인서만(남의 것·없는 것은 404), 만료됐으면 410.
+     * 만료 판단은 최신 조회와 같은 Certificate.isExpiredOn 을 쓴다.
+     */
+    public CertificateDtos.DownloadFile download(Long personaId, Long certificateId) {
+        Long memberId = memberRepository.getChild(personaId).getMemberId();
+        Certificate c = certificateRepository.findByCertificateIdAndMemberId(certificateId, memberId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.CERTIFICATE_NOT_FOUND));
+        if (c.isExpiredOn(seedRepository.today())) throw new GeneralException(ErrorStatus.CERTIFICATE_EXPIRED);
+
+        byte[] pdf = storage.read(c.getFilePath()).orElseThrow(() -> new GeneralException(ErrorStatus.CERTIFICATE_FILE_MISSING));
+        return new CertificateDtos.DownloadFile("certificate_" + c.getCertificateId() + ".pdf", pdf);
+    }
+
     /** 가장 최근에 발급한 확인서. 만료됐어도 내려주고 expired 로 알린다. 발급한 적이 없으면 404 */
     public CertificateDtos.LatestResponse getLatest(Long personaId) {
         Long memberId = memberRepository.getChild(personaId).getMemberId();

@@ -9,8 +9,14 @@ import com.cheotdanchu.service.CertificateService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -53,5 +59,17 @@ public class ChildCertificateController {
             @RequestHeader("X-Persona-Id") Long personaId,
             @Valid @RequestBody CertificateDtos.IssueRequest request) {
         return ApiResponse.onSuccess(SuccessStatus.CERTIFICATE_ISSUED, certificateService.issue(personaId, request.identityVerified()));
+    }
+
+    @Operation(summary = "확인서 다운로드",
+            description = "자녀 전용(부모는 403). 본인이 발급한 확인서를 PDF 파일(application/pdf, certificate_{id}.pdf)로 내려받습니다. 남의 확인서나 없는 확인서는 404, 만료된 확인서는 410(\"만료된 확인서예요\"), 서버에서 PDF 파일을 찾을 수 없으면 404.")
+    @GetMapping("/child/certificates/{certificateId}/download")
+    public ResponseEntity<byte[]> download(@RequestHeader("X-Persona-Id") Long personaId, @PathVariable Long certificateId) {
+        CertificateDtos.DownloadFile file = certificateService.download(personaId, certificateId);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore()) // 개인 정산 기록이라 중간 캐시·브라우저에 남기지 않는다
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(file.fileName()).build().toString())
+                .body(file.content());
     }
 }

@@ -34,6 +34,8 @@ public enum ErrorStatus {
     CERTIFICATE_NOT_FOUND(404, "발급한 확인서가 없어요"),
     CERTIFICATE_NOT_AVAILABLE(409, "지금은 확인서를 발급할 수 없어요"),
     CERTIFICATE_ALREADY_ISSUED(409, "이미 유효한 확인서가 있어요"),
+    CERTIFICATE_EXPIRED(410, "만료된 확인서예요"),
+    CERTIFICATE_FILE_MISSING(404, "확인서 파일을 찾을 수 없어요"),
     IDENTITY_NOT_VERIFIED(400, "본인 인증을 먼저 해주세요"),
     ALREADY_REVIEWED(409, "이미 처리된 제출이에요."),
     ALREADY_REMINDED(409, "오늘은 이미 부모님께 알림을 보냈어요."),
