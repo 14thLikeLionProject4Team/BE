@@ -7,16 +7,19 @@ import com.cheotdanchu.common.response.SuccessStatus;
 import com.cheotdanchu.dto.MissionCreateRequest;
 import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionProposalRequest;
+import com.cheotdanchu.dto.MissionUpdateRequest;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionQueryDtos;
 import com.cheotdanchu.dto.MissionSubmitResponse;
 import com.cheotdanchu.dto.SubmissionReviewDtos;
+import com.cheotdanchu.entity.Mission;
 import com.cheotdanchu.service.MissionService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -88,6 +91,14 @@ public class MissionController {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_PROPOSED, missionService.proposeMission(personaId, request));
     }
 
+    @Operation(summary = "추천 미션 제안", description = "자녀 전용. 자녀 화면 추천 미션(RECOMMENDED, recommend_to = CHILD)을 부모에게 제안한다 → PROPOSED, 추천 보상은 desiredReward로 넘어가고 부모에게 MISSION_PROPOSED 알림. 그 외 미션은 409.")
+    @PostMapping("/missions/{missionId}/propose")
+    public ApiResponse<MissionCreateResponse> proposeRecommendation(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long missionId) {
+        return ApiResponse.onSuccess(SuccessStatus.RECOMMENDATION_PROPOSED, missionService.proposeRecommendation(personaId, missionId));
+    }
+
     @Operation(summary = "제안·추천 미션 오픈", description = "부모 전용. 제안(PROPOSED·ON_HOLD)·추천(RECOMMENDED) 미션을 미션 생성과 같은 필드로 채워 엽니다 → NEW, 자녀 알림. 그 외 상태는 409, 남은 한도 초과는 422.")
     @PatchMapping("/missions/{missionId}/open")
     public ApiResponse<MissionCreateResponse> openMission(
@@ -115,6 +126,15 @@ public class MissionController {
         return ApiResponse.onSuccess(SuccessStatus.MISSION_SUBMITTED, missionService.submitMission(personaId, missionId, photos));
     }
 
+    @Operation(summary = "승인 재요청", description = "자녀 전용. 확인을 기다리는 제출을 부모에게 다시 알린다(MISSION_REMIND, refId = submissionId). 이미 승인·반려된 제출은 409, 다른 가족의 제출은 404.")
+    @PostMapping("/missions/submissions/{submissionId}/remind")
+    public ApiResponse<Void> remindSubmission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long submissionId) {
+        missionService.remindSubmission(personaId, submissionId);
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_REMINDED, null);
+    }
+
     @Operation(summary = "미션 승인", description = "부모 전용. 보상을 자녀 계좌로 보내고(MISSION_REWARD 이체) 알림. 목표 횟수를 채우면 COMPLETED, 아니면 IN_PROGRESS. 이번 정산 기간 한도를 넘으면 422.")
     @PostMapping("/missions/submissions/{submissionId}/approve")
     public ApiResponse<SubmissionReviewDtos.ApproveResponse> approve(
@@ -133,6 +153,32 @@ public class MissionController {
             @Valid @RequestBody SubmissionReviewDtos.RejectRequest request) {
         return ApiResponse.onSuccess(SuccessStatus.SUBMISSION_REJECTED,
                 missionService.reject(personaId, submissionId, request.reason()));
+    }
+
+    @Operation(summary = "미션 수정", description = "부모 전용. 새 미션·진행 중·확인 대기 미션의 이름·완료 기준·보상·마감일 중 보낸 것만 바꾼다. 끝난 미션이나 아직 열지 않은 제안·추천은 409, 보상이 이번 달 남은 한도를 넘으면 422, 마감일이 시작일보다 앞서면 400.")
+    @PatchMapping("/missions/{missionId}")
+    public ApiResponse<MissionCreateResponse> updateMission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long missionId,
+            @Valid @RequestBody MissionUpdateRequest request) {
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_UPDATED, missionService.updateMission(personaId, missionId, request));
+    }
+
+    @Operation(summary = "미션 취소", description = "부모 전용. 지우지 않고 CANCELED로 바꾸며 종료 미션 목록에 남는다. 새 미션·진행 중인 미션만 가능하고, 확인 대기(SUBMITTED)는 제출을 먼저 승인·반려해야 한다. 그 외 상태는 409.")
+    @DeleteMapping("/missions/{missionId}")
+    public ApiResponse<MissionCreateResponse> cancelMission(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long missionId) {
+        return ApiResponse.onSuccess(SuccessStatus.MISSION_CANCELED, missionService.cancelMission(personaId, missionId));
+    }
+
+    @Operation(summary = "추천 미션 목록", description = "자녀·부모 공용. target=CHILD(자녀 화면) | PARENT(부모 화면), 내 역할과 같아야 한다(다르면 400). 10개씩, cursor는 이전 페이지의 nextCursor. 부모 화면 추천은 '제안·추천 미션 오픈'으로 열고, 자녀 화면 추천은 '추천 미션 제안'으로 부모에게 제안한다.")
+    @GetMapping("/missions/recommendations")
+    public ApiResponse<MissionQueryDtos.RecommendationListResponse> getRecommendations(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @RequestParam(required = false) Mission.RecommendTo target,
+            @RequestParam(required = false) Long cursor) {
+        return ApiResponse.onSuccess(SuccessStatus.RECOMMENDATIONS_OK, missionService.getRecommendations(personaId, target, cursor));
     }
 
     @Operation(summary = "미션 상세 조회", description = "미션 한 건의 상세와 제출 이력(최신순, 사진 포함). 자녀·부모 공용. 다른 가족의 미션은 404.")

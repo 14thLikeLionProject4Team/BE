@@ -141,6 +141,7 @@ CREATE TABLE missions (
   status         ENUM('RECOMMENDED','PROPOSED','ON_HOLD','NEW','IN_PROGRESS','SUBMITTED','COMPLETED','CANCELED','EXPIRED') NOT NULL COMMENT '상태',
   progress       TINYINT      NOT NULL DEFAULT 0 COMMENT '진행률',
   created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성일',
+  canceled_at    DATE         NULL     COMMENT '취소일',
   PRIMARY KEY (mission_id),
   KEY idx_missions_family_status (family_id, status),
   FOREIGN KEY (family_id) REFERENCES families (family_id)

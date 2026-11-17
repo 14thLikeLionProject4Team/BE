@@ -29,4 +29,8 @@ public interface MissionRepository extends JpaRepository<Mission, Long> {
     /** 커서(이전 페이지 마지막 missionId)보다 작은 것부터 최신순 */
     List<Mission> findByFamily_FamilyIdAndStatusInAndMissionIdLessThanOrderByMissionIdDesc(
             Long familyId, Collection<Mission.Status> statuses, Long cursor, Pageable pageable);
+
+    /** 추천 미션: 커서(이전 페이지 마지막 missionId)보다 큰 것부터 순서대로 */
+    List<Mission> findByFamily_FamilyIdAndStatusAndRecommendToAndMissionIdGreaterThanOrderByMissionId(
+            Long familyId, Mission.Status status, Mission.RecommendTo recommendTo, Long cursor, Pageable pageable);
 }

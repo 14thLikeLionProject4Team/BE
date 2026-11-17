@@ -26,6 +26,11 @@ public final class MissionQueryDtos {
 
     public record EndedListResponse(List<EndedMission> missions, Long nextCursor) {}
 
+    public record RecommendationListResponse(List<Recommendation> recommendations, Long nextCursor) {}
+
+    /** badge는 아직 정하는 기준이 없어 null */
+    public record Recommendation(Long missionId, String title, Mission.MissionType missionType, Integer rewardAmount, String badge) {}
+
     public record EndedMission(
             Long missionId,
             String title,

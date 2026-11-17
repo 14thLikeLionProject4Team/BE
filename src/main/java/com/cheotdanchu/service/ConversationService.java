@@ -9,6 +9,7 @@ import com.cheotdanchu.ai.RagRepository;
 import com.cheotdanchu.ai.SeedRepository;
 import com.cheotdanchu.common.exception.GeneralException;
 import com.cheotdanchu.common.response.ErrorStatus;
+import com.cheotdanchu.common.util.KoreanText;
 import com.cheotdanchu.dto.ConversationDtos;
 import com.cheotdanchu.entity.ChatMessage;
 import com.cheotdanchu.entity.ChildMessage;
@@ -171,10 +172,7 @@ public class ConversationService {
 
     /** 부르는 말: 받침이 있으면 "아"(지민아), 없으면 "야"(루피야) */
     static String vocative(String name) {
-        if (name.isEmpty()) return "야";
-        char last = name.charAt(name.length() - 1);
-        boolean hangul = last >= 0xAC00 && last <= 0xD7A3;
-        return hangul && (last - 0xAC00) % 28 != 0 ? "아" : "야";
+        return KoreanText.hasBatchim(name) ? "아" : "야";
     }
 
     /**

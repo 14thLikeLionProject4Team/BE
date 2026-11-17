@@ -51,6 +51,10 @@ public class Mission {
     @Column(nullable = false)
     private Origin origin;
 
+    /** 첫단추 추천 미션이 어느 화면 추천인지 (자녀 화면 / 부모 화면). 추천이 아니면 null */
+    @Enumerated(EnumType.STRING)
+    private RecommendTo recommendTo;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Status status;
@@ -58,6 +62,9 @@ public class Mission {
     /** DB 기본값(CURRENT_TIMESTAMP)으로 채운다 */
     @Column(insertable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    /** 취소한 날 (데모 기준일). 종료 미션 목록의 끝난 날로 쓴다 */
+    private LocalDate canceledAt;
 
     /** 부모가 만든 미션은 바로 열린다 (NEW) */
     public static Mission createByParent(Family family, MissionCreateRequest req) {
@@ -86,15 +93,32 @@ public class Mission {
         return m;
     }
 
-    /** 제안(보류 포함)·추천 미션만 부모가 열 수 있다 */
-    public boolean canOpen() {
+    /** 아직 열지 않은 제안·보류·추천 미션 (수정·취소 대신 '열기'로 정한다) */
+    public boolean isNotOpenedYet() {
         return status == Status.PROPOSED || status == Status.ON_HOLD || status == Status.RECOMMENDED;
+    }
+
+    /** 그중 부모가 열 수 있는 것: 자녀 화면 추천은 아이가 제안(PROPOSED)해야 열린다 */
+    public boolean canOpen() {
+        return isNotOpenedYet() && !(status == Status.RECOMMENDED && recommendTo == RecommendTo.CHILD);
     }
 
     /** 부모가 내용을 채워서 연다 ("금액 정해서 열기"). 출처(아이 제안·AI 추천)는 그대로 둔다 */
     public void open(MissionCreateRequest req) {
         fill(req);
         status = Status.NEW;
+    }
+
+    /** 자녀 화면 추천(RECOMMENDED, recommend_to = CHILD)만 아이가 부모에게 제안할 수 있다 */
+    public boolean canProposeRecommendation() {
+        return status == Status.RECOMMENDED && recommendTo == RecommendTo.CHILD;
+    }
+
+    /** 추천 보상은 아이가 바라는 보상으로 넘기고, 부모가 금액을 정해서 열 때까지 보상은 비워 둔다 (아이가 만든 제안과 같은 모양) */
+    public void proposeRecommendation() {
+        desiredReward = rewardAmount;
+        rewardAmount = null;
+        status = Status.PROPOSED;
     }
 
     public boolean canHold() {
@@ -104,6 +128,32 @@ public class Mission {
     /** 부모가 "다음에"를 누르면 보류. 아이 화면의 내가 제안한 미션에는 계속 보인다 */
     public void hold() {
         status = Status.ON_HOLD;
+    }
+
+    /** 새 미션·진행 중·확인 대기 미션만 부모가 고칠 수 있다 (끝난 미션, 아직 열지 않은 제안·추천은 안 됨) */
+    public boolean canEdit() {
+        return status == Status.NEW || status == Status.IN_PROGRESS || status == Status.SUBMITTED;
+    }
+
+    /** 보낸 필드만 바꾼다 */
+    public void edit(String title, String criteria, Integer rewardAmount, LocalDate endDate) {
+        if (title != null) this.title = title;
+        if (criteria != null) this.criteria = criteria;
+        if (rewardAmount != null) this.rewardAmount = rewardAmount;
+        if (endDate != null) this.endDate = endDate;
+    }
+
+    /**
+     * 새 미션·진행 중인 미션만 취소할 수 있다. 확인 대기(SUBMITTED)는 아이가 낸 제출이 확인 대기 목록에 남아 있어서
+     * 먼저 승인·반려해야 한다. 취소한 미션은 지우지 않고 CANCELED로 남겨 종료 미션 목록에 보인다
+     */
+    public boolean canCancel() {
+        return status == Status.NEW || status == Status.IN_PROGRESS;
+    }
+
+    public void cancel(LocalDate today) {
+        status = Status.CANCELED;
+        canceledAt = today;
     }
 
     private void fill(MissionCreateRequest req) {
@@ -156,5 +206,7 @@ public class Mission {
     public enum RepeatType { ONCE, DAILY, WEEKLY, MONTHLY }
     public enum VerifyMethod { PHOTO, DIRECT }
     public enum Origin { PARENT, CHILD, AI }
+    public enum RecommendTo { CHILD, PARENT }
+
     public enum Status { RECOMMENDED, PROPOSED, ON_HOLD, NEW, IN_PROGRESS, SUBMITTED, COMPLETED, CANCELED, EXPIRED }
 }

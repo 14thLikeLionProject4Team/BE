@@ -4,11 +4,13 @@ import com.cheotdanchu.ai.SeedRepository;
 import com.cheotdanchu.common.config.PhotoStorage;
 import com.cheotdanchu.common.exception.GeneralException;
 import com.cheotdanchu.common.response.ErrorStatus;
+import com.cheotdanchu.common.util.KoreanText;
 import com.cheotdanchu.dto.MissionCreateRequest;
 import com.cheotdanchu.dto.MissionCreateResponse;
 import com.cheotdanchu.dto.MissionDetailResponse;
 import com.cheotdanchu.dto.MissionListResponse;
 import com.cheotdanchu.dto.MissionProposalRequest;
+import com.cheotdanchu.dto.MissionUpdateRequest;
 import com.cheotdanchu.dto.MissionQueryDtos;
 import com.cheotdanchu.dto.MissionSubmitResponse;
 import com.cheotdanchu.dto.SubmissionReviewDtos;
@@ -35,6 +37,7 @@ import com.cheotdanchu.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -61,6 +64,7 @@ public class MissionService {
     private static final EnumSet<Mission.Status> ENDED =
             EnumSet.of(Mission.Status.COMPLETED, Mission.Status.CANCELED, Mission.Status.EXPIRED);
     private static final int ENDED_PAGE_SIZE = 20;
+    private static final int RECOMMENDATION_PAGE_SIZE = 10;
 
     private final MemberRepository memberRepository;
     private final MissionRepository missionRepository;
@@ -114,11 +118,26 @@ public class MissionService {
         if (req.endDate().isBefore(req.startDate())) throw new GeneralException(ErrorStatus.INVALID_PERIOD);
 
         Mission mission = missionRepository.save(Mission.createByChild(child.getFamily(), req));
+        notifyProposed(child, mission);
+
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
+    /** 자녀 화면 추천 미션을 아이가 부모에게 제안한다: RECOMMENDED → PROPOSED, 부모에게 알림. 그 외 미션은 409 */
+    @Transactional
+    public MissionCreateResponse proposeRecommendation(Long personaId, Long missionId) {
+        Member child = child(personaId);
+        Mission mission = familyMissionForUpdate(child, missionId);
+        if (!mission.canProposeRecommendation()) throw new GeneralException(ErrorStatus.MISSION_NOT_PROPOSABLE);
+        mission.proposeRecommendation();
+        notifyProposed(child, mission);
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
+    private void notifyProposed(Member child, Mission mission) {
         memberRepository.findByFamily_FamilyIdAndRole(child.getFamily().getFamilyId(), Member.Role.PARENT)
                 .ifPresent(p -> notificationRepository.save(Notification.of(p, Notification.Type.MISSION_PROPOSED,
                         "아이가 미션을 제안했어요", mission.getTitle(), mission.getMissionId(), demoNow())));
-
-        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
     }
 
     /** 제안·보류·추천 미션을 부모가 금액을 정해서 연다. 새로 만드는 것과 같은 검사(기간·한도)를 하고 아이에게 알린다 */
@@ -144,6 +163,62 @@ public class MissionService {
         Mission mission = familyMissionForUpdate(parent, missionId);
         if (!mission.canHold()) throw new GeneralException(ErrorStatus.MISSION_NOT_HOLDABLE);
         mission.hold();
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
+    private static final String NOT_OPENED_YET = "아직 열지 않은 미션은 '열기'에서 정해 주세요.";
+
+    /**
+     * 진행 중인 미션 내용을 고친다 (보낸 필드만). 끝난 미션·아직 열지 않은 미션은 409.
+     * 보상을 바꾸면 새로 만들 때와 같은 한도 검사를 하고, 아이가 낸 완료를 확인하기 전(SUBMITTED)에는 보상을 못 바꾼다
+     * (확인 대기 중에 금액이 바뀌면 아이가 모르는 금액이 지급된다).
+     * 마감일은 오늘보다, 시작일보다 앞설 수 없고, 마감일을 당겨서 이미 승인받은 횟수가 목표를 채우면 바로 완료로 바꾼다
+     * (안 바꾸면 계속 제출·승인돼서 보상이 더 나간다).
+     */
+    @Transactional
+    public MissionCreateResponse updateMission(Long personaId, Long missionId, MissionUpdateRequest req) {
+        Member parent = parent(personaId);
+        if (req.isEmpty()) throw new GeneralException(ErrorStatus.INVALID_INPUT, "바꿀 내용을 보내 주세요.");
+        if (req.title() != null && req.title().isBlank()) throw new GeneralException(ErrorStatus.INVALID_INPUT, "미션 이름을 입력해 주세요.");
+        if (req.criteria() != null && req.criteria().isBlank()) throw new GeneralException(ErrorStatus.INVALID_INPUT, "완료 기준을 입력해 주세요.");
+
+        Mission mission = familyMissionForUpdate(parent, missionId);
+        if (mission.isNotOpenedYet()) throw new GeneralException(ErrorStatus.MISSION_NOT_EDITABLE, NOT_OPENED_YET);
+        if (!mission.canEdit()) throw new GeneralException(ErrorStatus.MISSION_NOT_EDITABLE);
+        if (req.rewardAmount() != null && mission.getStatus() == Mission.Status.SUBMITTED) {
+            throw new GeneralException(ErrorStatus.MISSION_NOT_EDITABLE, "아이가 낸 완료를 먼저 확인한 뒤 보상을 바꿔 주세요.");
+        }
+        if (req.endDate() != null && req.endDate().isBefore(seedRepository.today())) {
+            throw new GeneralException(ErrorStatus.INVALID_PERIOD, "마감일은 오늘 이후로 정해 주세요.");
+        }
+        if (req.endDate() != null && mission.getStartDate() != null && req.endDate().isBefore(mission.getStartDate())) {
+            throw new GeneralException(ErrorStatus.INVALID_PERIOD);
+        }
+        // 보상을 올릴 때만 한도 검사 (내리는 건 한도에 가까워도 막지 않는다)
+        if (req.rewardAmount() != null && (mission.getRewardAmount() == null || req.rewardAmount() > mission.getRewardAmount())) {
+            checkRewardCap(parent, childOf(parent), req.rewardAmount());
+        }
+
+        mission.edit(req.title() == null ? null : req.title().strip(),
+                req.criteria() == null ? null : req.criteria().strip(), req.rewardAmount(), req.endDate());
+        if (mission.getStatus() == Mission.Status.IN_PROGRESS) {
+            mission.afterApproval((int) submissionRepository.countByMission_MissionIdAndReviewStatus(
+                    mission.getMissionId(), MissionSubmission.ReviewStatus.APPROVED));
+        }
+        return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
+    }
+
+    /** 미션 취소 (소프트 삭제 → CANCELED). 확인 대기 중이면 제출을 먼저 처리해야 하고, 끝난 미션은 409 */
+    @Transactional
+    public MissionCreateResponse cancelMission(Long personaId, Long missionId) {
+        Member parent = parent(personaId);
+        Mission mission = familyMissionForUpdate(parent, missionId);
+        if (mission.isNotOpenedYet()) throw new GeneralException(ErrorStatus.MISSION_NOT_CANCELABLE, NOT_OPENED_YET);
+        if (mission.getStatus() == Mission.Status.SUBMITTED) {
+            throw new GeneralException(ErrorStatus.MISSION_NOT_CANCELABLE, "아이가 낸 완료를 먼저 확인해 주세요.");
+        }
+        if (!mission.canCancel()) throw new GeneralException(ErrorStatus.MISSION_NOT_CANCELABLE);
+        mission.cancel(seedRepository.today());
         return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
     }
 
@@ -274,6 +349,47 @@ public class MissionService {
                 submission.getRejectReason(), mission.getStatus());
     }
 
+    /**
+     * 확인을 기다리는 제출을 부모에게 다시 알린다 (MISSION_REMIND, refId = submissionId). 이미 승인·반려됐으면 409.
+     * 부모 알림함에 같은 알림이 쌓이지 않도록 제출 하나에 하루(데모 기준일) 한 번만 보낸다.
+     * 연타하면 제출 행 잠금에서 줄을 서는데, 잠금이 풀린 뒤 앞 요청이 저장한 알림이 보여야 해서 READ_COMMITTED로 읽는다
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void remindSubmission(Long personaId, Long submissionId) {
+        Member child = child(personaId);
+        MissionSubmission submission = familySubmission(child, submissionId);
+        if (!submission.isPending()) throw new GeneralException(ErrorStatus.ALREADY_REVIEWED, "이미 부모님이 확인한 미션이에요.");
+        if (notificationRepository.existsByTypeAndRefIdAndCreatedAtGreaterThanEqual(
+                Notification.Type.MISSION_REMIND, submissionId, seedRepository.today().atStartOfDay())) {
+            throw new GeneralException(ErrorStatus.ALREADY_REMINDED);
+        }
+
+        memberRepository.findByFamily_FamilyIdAndRole(child.getFamily().getFamilyId(), Member.Role.PARENT)
+                .ifPresent(p -> notificationRepository.save(Notification.of(p, Notification.Type.MISSION_REMIND,
+                        child.getName() + (KoreanText.hasBatchim(child.getName()) ? "이" : "가") + " 미션 확인을 기다려요",
+                        submission.getMission().getTitle(), submission.getSubmissionId(), demoNow())));
+    }
+
+    /**
+     * 첫단추 추천 미션 목록. 자녀 화면(CHILD)과 부모 화면(PARENT) 추천은 따로이고, target은 내 역할과 같아야 한다.
+     * 10개씩, cursor는 이전 페이지 마지막 missionId. 추천은 시드로 넣어 둔다
+     */
+    public MissionQueryDtos.RecommendationListResponse getRecommendations(Long personaId, Mission.RecommendTo recommendTo, Long cursor) {
+        Member member = memberRepository.getPersona(personaId);
+        if (recommendTo == null) throw new GeneralException(ErrorStatus.INVALID_INPUT, "target은 CHILD 또는 PARENT예요.");
+        boolean mine = (member.getRole() == Member.Role.CHILD) == (recommendTo == Mission.RecommendTo.CHILD);
+        if (!mine) throw new GeneralException(ErrorStatus.INVALID_INPUT, "내 화면의 추천만 볼 수 있어요.");
+
+        List<Mission> page = missionRepository.findByFamily_FamilyIdAndStatusAndRecommendToAndMissionIdGreaterThanOrderByMissionId(
+                member.getFamily().getFamilyId(), Mission.Status.RECOMMENDED, recommendTo, cursor == null ? 0L : cursor,
+                PageRequest.of(0, RECOMMENDATION_PAGE_SIZE + 1));
+        boolean hasNext = page.size() > RECOMMENDATION_PAGE_SIZE;
+        List<MissionQueryDtos.Recommendation> items = page.stream().limit(RECOMMENDATION_PAGE_SIZE)
+                .map(m -> new MissionQueryDtos.Recommendation(m.getMissionId(), m.getTitle(), m.getMissionType(), m.getRewardAmount(), null))
+                .toList();
+        return new MissionQueryDtos.RecommendationListResponse(items, hasNext ? items.get(items.size() - 1).missionId() : null);
+    }
+
     private Member child(Long personaId) {
         Member member = memberRepository.getPersona(personaId);
         if (member.getRole() != Member.Role.CHILD) throw new GeneralException(ErrorStatus.CHILD_ONLY);
@@ -335,8 +451,9 @@ public class MissionService {
         return new MissionQueryDtos.EndedListResponse(missions, hasNext ? missions.get(missions.size() - 1).missionId() : null);
     }
 
-    /** 끝난 날: 완료된 미션은 마지막 승인일, 그 외(취소·만료)는 마감일 */
+    /** 끝난 날: 완료된 미션은 마지막 승인일, 취소한 미션은 취소한 날, 그 외(만료)는 마감일 */
     private LocalDate endedAt(Mission m) {
+        if (m.getStatus() == Mission.Status.CANCELED && m.getCanceledAt() != null) return m.getCanceledAt();
         return submissionRepository
                 .findFirstByMission_MissionIdAndReviewStatusOrderByReviewedAtDesc(m.getMissionId(), MissionSubmission.ReviewStatus.APPROVED)
                 .filter(s -> m.getStatus() == Mission.Status.COMPLETED && s.getReviewedAt() != null)
