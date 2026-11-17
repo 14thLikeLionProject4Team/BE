@@ -82,6 +82,11 @@ public class Certificate {
         return c;
     }
 
+    /** 발급번호: CD-발급 연도-월일-확인서 ID(4자리 이상). 확인서에 적고 QR 진위 확인 주소에도 쓴다 */
+    public String number() {
+        return String.format("CD-%d-%02d%02d-%04d", issuedAt.getYear(), issuedAt.getMonthValue(), issuedAt.getDayOfMonth(), certificateId);
+    }
+
     /**
      * 유효기한이 지났는지. 시연 기준일(SeedRepository.today)은 날짜 단위라서 만료일 당일까지는 유효하다.
      * 최신 조회와 다운로드·공유 링크의 만료 판단은 모두 이 메서드를 써서 같은 확인서가 곳곳에서 다르게 판정되지 않게 한다.

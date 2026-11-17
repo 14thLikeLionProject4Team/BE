@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import static com.cheotdanchu.controller.SettlementFixture.completeCurrentSettlement;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -84,22 +85,79 @@ class CertificateIssueApiTest {
     }
 
     @Test
-    void 실제_데이터로_한글이_나오는_PDF를_저장한다() throws Exception {
+    void 발급하면_PDF_파일이_저장되고_내용은_양식_테스트가_확인한다() throws Exception {
         String body = issue(4).andReturn().getResponse().getContentAsString();
         long id = ((Number) JsonPath.read(body, "$.data.certificateId")).longValue();
 
         String fileName = jdbc.queryForObject("SELECT file_path FROM certificates WHERE certificate_id = ?", String.class, id);
         Path file = Path.of(certificateDir).toAbsolutePath().resolve(fileName);
         assertTrue(Files.exists(file), "PDF 파일이 저장돼야 해요: " + file);
+    }
 
-        try (PDDocument pdf = Loader.loadPDF(file.toFile())) {
-            // 글꼴에 따라 띄어쓰기가 다른 문자로 뽑히기도 해서, 한글·숫자·/ 만 남기고 비교한다
-            String text = new PDFTextStripper().getText(pdf).replaceAll("[^가-힣0-9/]", "");
-            assertTrue(text.contains("금융행동기록확인서"), text);
-            assertTrue(text.contains("뽀로로"), text);
-            assertTrue(text.contains("24/27개월"), text);
-            assertTrue(text.contains("최장연속완납15개월"), text);
+    /** 글꼴에 따라 띄어쓰기·괄호가 다른 문자로 뽑히기도 해서, 한글·숫자·영문·/ % . - 만 남기고 붙여서 비교한다 */
+    private static String norm(String s) {
+        return s.replaceAll("[^가-힣0-9A-Za-z/%.\\-]", "");
+    }
+
+    private static void assertContains(String text, String... expected) {
+        for (String e : expected) assertTrue(text.contains(norm(e)), "PDF 에 없어요: " + e + "\n" + text);
+    }
+
+    /** 발급한 확인서 PDF 의 글을 norm 으로 정리해서 뽑는다 */
+    private String pdfText(long certificateId, int expectedPages) throws Exception {
+        String fileName = jdbc.queryForObject("SELECT file_path FROM certificates WHERE certificate_id = ?", String.class, certificateId);
+        try (PDDocument pdf = Loader.loadPDF(Path.of(certificateDir).toAbsolutePath().resolve(fileName).toFile())) {
+            assertEquals(expectedPages, pdf.getNumberOfPages());
+            return norm(new PDFTextStripper().getText(pdf));
         }
+    }
+
+    @Test
+    void 팀_양식대로_한_쪽에_네_부분이_들어간다() throws Exception {
+        long id = ((Number) JsonPath.read(issue(4).andReturn().getResponse().getContentAsString(), "$.data.certificateId")).longValue();
+
+        String text = pdfText(id, 1);
+
+        // 위: 발급번호·제목·합성 데이터 안내
+        assertContains(text, String.format("발급번호 CD-2026-1019-%04d", id), "금융행동 기록 확인서", "합성 데이터 시연 · 실제 발급 문서가 아닙니다");
+        // 1. 발급 정보
+        assertContains(text, "1. 발급 정보", "성명 뽀로로", "출생연도 2007년", "유효기간 2027. 01. 17.까지 (발급일부터 90일)", "본인 동의 본인이 직접 발급했으며", "진위 확인");
+        // 2. 기록 개요
+        assertContains(text, "관찰 기간 2024. 07. ~ 2026. 09. (27개월)", "100% (검증된 정산 27회 / 전체 정산 27회)", "월 평균 5만~10만 원 구간", "검증된 정산 12회 이상");
+        // 3. 결제일 정산 기록 (전체 기간과 최근 12개월)
+        assertContains(text, "전체 기간 (27개월) 최근 12개월", "89% (24/27개월) 100% (12/12개월)", "15개월 12개월", "100% (3/3건) 해당 없음(부족 0건)", "4.3일 해당 없음");
+        // 4. 읽는 분께
+        assertContains(text, "4. 읽는 분께", "신용평점이나 신용등급이 아니며");
+    }
+
+    @Test
+    void 저축_이행률은_양식에서_뺐다() throws Exception {
+        long id = ((Number) JsonPath.read(issue(4).andReturn().getResponse().getContentAsString(), "$.data.certificateId")).longValue();
+
+        assertFalse(pdfText(id, 1).contains("저축"));
+    }
+
+    @Test
+    void PDF의_전체_기간_지표는_미리보기와_같은_숫자다() throws Exception {
+        long id = ((Number) JsonPath.read(issue(4).andReturn().getResponse().getContentAsString(), "$.data.certificateId")).longValue();
+        String preview = mockMvc.perform(get("/child/certificates/preview").header("X-Persona-Id", 4)).andReturn().getResponse().getContentAsString();
+        int fullPaid = JsonPath.read(preview, "$.data.fullPaidMonths");
+        int total = JsonPath.read(preview, "$.data.totalMonths");
+        int streak = JsonPath.read(preview, "$.data.maxStreak");
+        double margin = JsonPath.read(preview, "$.data.avgMarginRate");
+
+        String text = pdfText(id, 1);
+
+        assertTrue(text.contains(fullPaid + "/" + total + "개월"), text);
+        assertTrue(text.contains(streak + "개월"), text);
+        assertTrue(text.contains("평균" + margin + "%"), text); // 여유율은 명세 정의 그대로
+    }
+
+    @Test
+    void 발급번호는_연도_월일_확인서_번호로_만든다() throws Exception {
+        long id = ((Number) JsonPath.read(issue(4).andReturn().getResponse().getContentAsString(), "$.data.certificateId")).longValue();
+
+        assertTrue(pdfText(id, 1).contains(String.format("CD-2026-1019-%04d", id)));
     }
 
     @Test
