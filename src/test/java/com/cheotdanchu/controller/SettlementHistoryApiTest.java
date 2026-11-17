@@ -16,6 +16,8 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 
+import static com.cheotdanchu.controller.SettlementFixture.insertSettlementTransfer;
+import static com.cheotdanchu.controller.SettlementFixture.openSettlement;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -242,31 +244,19 @@ class SettlementHistoryApiTest {
         assertEquals(List.of("SETTLEMENT", "AUTO_DEDUCT"), types);
     }
 
-    /** 가족 A 의 이번 달 정산 ID (시드에서는 정산 전) */
-    private long openSettlement() {
-        return settlementOf(1, "2026-10-25");
-    }
-
-    /** 결제일 정산 이체를 넣는다 (루피 계좌 → 부모 계좌) */
-    private void insertSettlementTransfer(long settlementId, int amount) {
-        jdbc.update("INSERT INTO transfers (from_account_id, to_account_id, type, amount, settlement_id, transferred_at) "
-                + "SELECT c.account_id, p.account_id, 'SETTLEMENT', ?, ?, '2026-10-25 18:00:00' "
-                + "FROM accounts c, accounts p WHERE c.member_id = 2 AND p.member_id = 1", amount, settlementId);
-    }
-
     /** 이번 달 정산을 부족이 남은 상태(SHORTFALL)로 만들고 결제일에 paid 원을 이체한 것으로 한다. billed 가 null 이면 청구액이 비어 있는 정산 */
     private long shortfallSettlement(Integer billed, int paid) {
-        long id = openSettlement();
+        long id = openSettlement(jdbc);
         jdbc.update("UPDATE settlements SET status = 'SHORTFALL', billed_amount = ? WHERE settlement_id = ?", billed, id);
-        insertSettlementTransfer(id, paid);
+        insertSettlementTransfer(jdbc, id, paid, "2026-10-25 18:00:00");
         return id;
     }
 
     @Test
     void 결제일이_되어_정산이_필요한_상태는_부족액을_아직_말하지_않는다() throws Exception {
-        jdbc.update("UPDATE settlements SET status = 'REQUIRED' WHERE settlement_id = ?", openSettlement());
+        jdbc.update("UPDATE settlements SET status = 'REQUIRED' WHERE settlement_id = ?", openSettlement(jdbc));
 
-        detail(2, openSettlement())
+        detail(2, openSettlement(jdbc))
                 .andExpect(jsonPath("$.data.status").value("REQUIRED"))
                 .andExpect(jsonPath("$.data.billedAmount").value(79500))
                 .andExpect(jsonPath("$.data.remainingShortfall").value(0))

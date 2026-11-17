@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
 
+import static com.cheotdanchu.controller.SettlementFixture.openSettlement;
+import static com.cheotdanchu.controller.SettlementFixture.overdueSettlement;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -39,20 +41,6 @@ class ShortfallPaymentApiTest {
     @Autowired
     EntityManager em;
 
-    private long openSettlement() {
-        return jdbc.queryForObject("SELECT settlement_id FROM settlements WHERE family_id = 1 AND period_end = '2026-10-25'", Long.class);
-    }
-
-    /** 결제일이 지나 부족이 남은 정산: 청구 79,500원 중 결제일에 70,000원만 이체돼 9,500원이 부족하다 (시연 기준일이 10-19라서 결제일 이체를 그보다 앞선 시각으로 둔다) */
-    private long overdueSettlement() {
-        long id = openSettlement();
-        jdbc.update("UPDATE settlements SET status = 'SHORTFALL', billed_amount = 79500 WHERE settlement_id = ?", id);
-        jdbc.update("INSERT INTO transfers (from_account_id, to_account_id, type, amount, settlement_id, transferred_at) "
-                + "SELECT c.account_id, p.account_id, 'SETTLEMENT', 70000, ?, '2026-10-18 18:00:00' "
-                + "FROM accounts c, accounts p WHERE c.member_id = 2 AND p.member_id = 1", id);
-        return id;
-    }
-
     private ResultActions pay(int personaId, long settlementId, String source, Integer amount) throws Exception {
         String json = "{" + (source == null ? "" : "\"source\":\"" + source + "\"") + (source != null && amount != null ? "," : "")
                 + (amount == null ? "" : "\"amount\":" + amount) + "}";
@@ -76,7 +64,7 @@ class ShortfallPaymentApiTest {
 
     @Test
     void 남은_돈으로_일부를_갚으면_남은_돈이_줄고_쓸_수_있는_돈은_그대로고_일부_정산이_유지된다() throws Exception {
-        long id = overdueSettlement();
+        long id = overdueSettlement(jdbc);
         long[] before = account();
 
         pay(2, id, "CARRYOVER", 4000)
@@ -108,7 +96,7 @@ class ShortfallPaymentApiTest {
     // 화면이 "얼마 갚아야 하나"를 갚기 전에 알 수 있도록 정산 상세가 남은 부족분을 알려준다. 갚기 응답의 남은 부족분과 같은 값이다
     @Test
     void 정산_상세의_남은_부족분은_갚을_때마다_줄고_갚기_응답과_같다() throws Exception {
-        long id = overdueSettlement();
+        long id = overdueSettlement(jdbc);
         mockMvc.perform(get("/settlements/" + id).header("X-Persona-Id", 2))
                 .andExpect(jsonPath("$.data.shortfallAmount").value(9500))
                 .andExpect(jsonPath("$.data.remainingShortfall").value(9500));
@@ -126,9 +114,24 @@ class ShortfallPaymentApiTest {
                 .andExpect(jsonPath("$.data.remainingShortfall").value(0));
     }
 
+    // 청구액이 아직 확정되지 않은(비어 있는) 정산은 카드 결제 합계(79,500원)를 청구액으로 보고 남은 부족분을 센다
+    @Test
+    void 청구액이_비어_있는_부족_정산도_카드_결제_합계로_남은_부족분을_센다() throws Exception {
+        long id = overdueSettlement(jdbc);
+        jdbc.update("UPDATE settlements SET billed_amount = NULL WHERE settlement_id = ?", id);
+
+        pay(2, id, "CARRYOVER", 9501)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("amount: 남은 부족분(9,500원)을 넘을 수 없어요"));
+        pay(2, id, "CARRYOVER", 9500)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.remainingShortfall").value(0))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+    }
+
     @Test
     void 나눠서_전부_갚으면_스스로_해소로_끝나고_정산_상세에_그대로_나온다() throws Exception {
-        long id = overdueSettlement();
+        long id = overdueSettlement(jdbc);
 
         pay(2, id, "CARRYOVER", 4000).andExpect(status().isCreated());
         pay(2, id, "DIRECT", 5500)
@@ -155,7 +158,7 @@ class ShortfallPaymentApiTest {
 
     @Test
     void 직접_송금은_갚은_기록만_남고_계좌_잔액은_그대로다() throws Exception {
-        long id = overdueSettlement();
+        long id = overdueSettlement(jdbc);
         long[] before = account();
 
         pay(2, id, "DIRECT", 9500)
@@ -172,7 +175,7 @@ class ShortfallPaymentApiTest {
 
     @Test
     void 남은_돈과_직접_송금을_섞어서_갚을_수_있고_남은_돈에서는_그만큼만_나간다() throws Exception {
-        long id = overdueSettlement();
+        long id = overdueSettlement(jdbc);
 
         pay(2, id, "CARRYOVER", 2000).andExpect(status().isCreated());
         pay(2, id, "DIRECT", 7500)
@@ -185,7 +188,7 @@ class ShortfallPaymentApiTest {
 
     @Test
     void 남은_부족분을_넘게_갚으려_하면_400이고_아무것도_바뀌지_않는다() throws Exception {
-        long id = overdueSettlement();
+        long id = overdueSettlement(jdbc);
         long[] before = account();
 
         pay(2, id, "CARRYOVER", 9501)
@@ -200,7 +203,7 @@ class ShortfallPaymentApiTest {
 
     @Test
     void 지난달까지_남은_돈보다_많이_갚으려_하면_400이고_직접_송금은_된다() throws Exception {
-        long id = overdueSettlement();
+        long id = overdueSettlement(jdbc);
         // 남은 돈을 5,000원으로 줄인다 (계좌 전체 잔액은 이번 달 쓸 수 있는 돈 73,000원 + 5,000원)
         jdbc.update("UPDATE accounts SET carryover_balance = 5000, balance = 78000 WHERE member_id = 2");
 
@@ -214,7 +217,7 @@ class ShortfallPaymentApiTest {
 
     @Test
     void 이미_다_갚은_정산과_끝난_정산은_갚을_부족분이_없어_409다() throws Exception {
-        long id = overdueSettlement();
+        long id = overdueSettlement(jdbc);
         pay(2, id, "CARRYOVER", 9500).andExpect(status().isCreated());
 
         pay(2, id, "CARRYOVER", 100)
@@ -228,7 +231,7 @@ class ShortfallPaymentApiTest {
     // 결제일 전에는 아직 부족분이 확정되지 않았다: 부족 예상이 있어도 갚을 수 없다 (결제일에 쓸 수 있는 돈 전액이 먼저 이체된다)
     @Test
     void 결제일_전_정산은_부족_예상이_있어도_갚을_수_없고_돈이_그대로다() throws Exception {
-        long id = openSettlement(); // 정산 전(SCHEDULED), 부족 예상 6,500원
+        long id = openSettlement(jdbc); // 정산 전(SCHEDULED), 부족 예상 6,500원
         long[] before = account();
 
         pay(2, id, "CARRYOVER", 6500)
@@ -248,7 +251,7 @@ class ShortfallPaymentApiTest {
 
     @Test
     void 금액이_1원_미만이거나_빠졌거나_방법이_잘못되면_400이다() throws Exception {
-        long id = overdueSettlement();
+        long id = overdueSettlement(jdbc);
 
         pay(2, id, "CARRYOVER", 0).andExpect(status().isBadRequest());
         pay(2, id, "CARRYOVER", -1).andExpect(status().isBadRequest());
@@ -260,7 +263,7 @@ class ShortfallPaymentApiTest {
 
     @Test
     void 부모가_갚으면_403_남의_가족_정산이거나_없는_정산이면_404다() throws Exception {
-        long id = overdueSettlement();
+        long id = overdueSettlement(jdbc);
 
         pay(1, id, "CARRYOVER", 1000)
                 .andExpect(status().isForbidden())

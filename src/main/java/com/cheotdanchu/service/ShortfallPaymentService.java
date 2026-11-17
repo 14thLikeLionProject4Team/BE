@@ -64,10 +64,7 @@ public class ShortfallPaymentService {
                     String.format(Locale.KOREA, "지난달까지 남은 돈(%,d원)보다 많이 갚을 수 없어요", account.getCarryoverBalance()));
         }
 
-        Long parentAccountId = memberRepository.findByFamily_FamilyIdAndRole(familyId, Member.Role.PARENT)
-                .flatMap(parent -> accountRepository.findByMemberId(parent.getMemberId()))
-                .map(Account::getAccountId)
-                .orElseThrow(() -> new GeneralException(ErrorStatus.ACCOUNT_NOT_FOUND));
+        Long parentAccountId = parentAccountId(familyId);
         // 이체·정산 시각은 데모 기준일 + 지금 시각 (실제 날짜로 남기면 다른 화면의 기간 계산과 어긋난다)
         LocalDateTime now = seedRepository.today().atTime(LocalTime.now().withNano(0));
 
@@ -82,11 +79,18 @@ public class ShortfallPaymentService {
                 account.getCarryoverBalance(), left, settlement.getStatus(), settlement.getResult());
     }
 
+    /** 부모 계좌 ID (부족분을 받는 쪽) */
+    private Long parentAccountId(Long familyId) {
+        return memberRepository.findByFamily_FamilyIdAndRole(familyId, Member.Role.PARENT)
+                .flatMap(parent -> accountRepository.findByMemberId(parent.getMemberId()))
+                .map(Account::getAccountId)
+                .orElseThrow(() -> new GeneralException(ErrorStatus.ACCOUNT_NOT_FOUND));
+    }
+
     /** 아직 갚을 부족분 (계산은 정산 상세와 같은 Settlement.remainingShortfall) */
     private long remainingShortfall(Settlement settlement) {
         Long id = settlement.getSettlementId();
-        long billed = settlement.getBilledAmount() != null ? settlement.getBilledAmount() : cardPaymentRepository.sumAmount(id);
-        return settlement.remainingShortfall(billed,
+        return settlement.remainingShortfall(cardPaymentRepository.billedOf(settlement),
                 transferRepository.sumBySettlementAndType(id, Transfer.Type.SETTLEMENT),
                 transferRepository.sumBySettlementAndType(id, Transfer.Type.SHORTFALL_PAYMENT));
     }

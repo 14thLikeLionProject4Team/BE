@@ -1,6 +1,7 @@
 package com.cheotdanchu.repository;
 
 import com.cheotdanchu.entity.CardPayment;
+import com.cheotdanchu.entity.Settlement;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -14,6 +15,11 @@ public interface CardPaymentRepository extends JpaRepository<CardPayment, Long> 
     /** 청구 예정액: 정산 기간 결제 합계 (취소는 마이너스로 들어 있어 그대로 합산) */
     @Query("select coalesce(sum(p.amount), 0L) from CardPayment p where p.settlementId = :settlementId")
     long sumAmount(@Param("settlementId") Long settlementId);
+
+    /** 정산의 청구액: 확정된 청구액이 있으면 그것, 아직 없는 정산(이번 달 등)은 카드 결제 합계 */
+    default long billedOf(Settlement settlement) {
+        return settlement.getBilledAmount() != null ? settlement.getBilledAmount() : sumAmount(settlement.getSettlementId());
+    }
 
     /**
      * 결제 건수(취소된 결제는 뺀 순건수): 취소 행 하나가 원래 결제 하나를 지우는 것으로 보고, 취소가 아닌 행 수에서 취소 행 수를 뺀다.

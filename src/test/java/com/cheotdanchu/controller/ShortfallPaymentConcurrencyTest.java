@@ -17,13 +17,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import static com.cheotdanchu.controller.SettlementFixture.overdueSettlement;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 /**
  * 같은 부족분을 동시에 여러 번 갚아도(버튼 연타) 한 번만 갚아지고 남은 돈도 한 번만 줄어야 한다.
- * 여러 요청이 각자 트랜잭션을 가져야 해서 롤백되는 테스트가 아니고, 이번 정산을 결제일이 지난 부족 정산(청구 79,500원 중 70,000원 이체,
- * 부족 9,500원)으로 바꿔서 쓰고 끝나면 바꾼 데이터를 직접 되돌린다.
+ * 여러 요청이 각자 트랜잭션을 가져야 해서 롤백되는 테스트가 아니고, 이번 정산을 결제일이 지난 부족 정산(SettlementFixture.overdueSettlement:
+ * 청구 79,500원 중 70,000원 이체, 부족 9,500원)으로 바꿔서 쓰고 끝나면 바꾼 데이터를 직접 되돌린다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -39,12 +40,9 @@ class ShortfallPaymentConcurrencyTest {
 
     @Test
     void 같은_부족분을_동시에_갚아도_한_번만_갚아진다() throws Exception {
-        long settlementId = jdbc.queryForObject("SELECT settlement_id FROM settlements WHERE family_id = 1 AND period_end = '2026-10-25'", Long.class);
+        // 이번 정산을 결제일이 지난 부족 정산(청구 79,500원 중 70,000원 이체, 부족 9,500원)으로 바꾼다. 끝에서 되돌린다
+        long settlementId = overdueSettlement(jdbc);
         Map<String, Object> before = jdbc.queryForMap("SELECT balance, carryover_balance FROM accounts WHERE member_id = 2");
-        jdbc.update("UPDATE settlements SET status = 'SHORTFALL', billed_amount = 79500 WHERE settlement_id = ?", settlementId);
-        jdbc.update("INSERT INTO transfers (from_account_id, to_account_id, type, amount, settlement_id, transferred_at) "
-                + "SELECT c.account_id, p.account_id, 'SETTLEMENT', 70000, ?, '2026-10-18 18:00:00' "
-                + "FROM accounts c, accounts p WHERE c.member_id = 2 AND p.member_id = 1", settlementId);
         try {
             List<Integer> statuses = payConcurrently(settlementId);
 
