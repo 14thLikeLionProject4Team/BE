@@ -79,18 +79,24 @@ public class SettlementHistoryService {
                 .orElseThrow(() -> new GeneralException(ErrorStatus.SETTLEMENT_NOT_FOUND));
 
         // 이번 달처럼 아직 청구액이 확정되지 않은 정산은 카드 결제 합계로 보여준다
-        long billed = s.getBilledAmount() != null ? s.getBilledAmount() : cardPaymentRepository.sumAmount(settlementId);
+        long billed = cardPaymentRepository.billedOf(s);
         List<Transfer> transfers = transferRepository.findBySettlementIdOrderByTransferredAtAscTransferIdAsc(settlementId);
         // 결제일에 이체된 금액과 그때의 부족액은 결제일 정산(SETTLEMENT) 이체에서 구한다. settlements.paid_amount 는 부족분을 갚으면
         // 바뀔 수 있어서 쓰지 않는다 (쓰면 부족분을 갚은 달이 "청구액 전부 이체, 부족 0"으로 보이고 이체 내역과 어긋난다)
-        int paidAtDue = transfers.stream().filter(t -> t.getType() == Transfer.Type.SETTLEMENT).mapToInt(Transfer::getAmount).sum();
+        long paidAtDue = sumOf(transfers, Transfer.Type.SETTLEMENT);
         long shortfall = SHORTFALL_KNOWN_STATUSES.contains(s.getStatus()) ? Math.max(billed - paidAtDue, 0) : 0;
+        long repaid = sumOf(transfers, Transfer.Type.SHORTFALL_PAYMENT);
 
         List<SettlementHistoryDtos.TransferItem> items = transfers.stream()
                 .map(t -> new SettlementHistoryDtos.TransferItem(t.getType(), t.getSource(), t.getAmount(), t.getTransferredAt()))
                 .toList();
         return new SettlementHistoryDtos.Detail(s.getSettlementId(), s.getPeriodStart(), s.getPeriodEnd(), s.getStatus(), s.getResult(),
-                billed, paidAtDue, shortfall, s.isExcluded(), s.getResolvedAt(), items);
+                billed, (int) paidAtDue, shortfall, s.remainingShortfall(billed, paidAtDue, repaid), s.isExcluded(), s.getResolvedAt(), items);
+    }
+
+    /** 이체 목록에서 한 종류의 금액 합 */
+    private static long sumOf(List<Transfer> transfers, Transfer.Type type) {
+        return transfers.stream().filter(t -> t.getType() == type).mapToLong(Transfer::getAmount).sum();
     }
 
     /** 정산 종료일은 가족마다 하나씩이라 다음 페이지를 이을 기준으로 쓴다 */

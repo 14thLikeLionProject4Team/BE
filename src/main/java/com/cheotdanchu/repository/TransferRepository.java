@@ -23,6 +23,10 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
     long sumReceived(@Param("accountId") Long accountId, @Param("type") Transfer.Type type,
                      @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
+    /** 정산에 연결된 이체 중 한 종류의 합계 (예: 지금까지 갚은 부족분) */
+    @Query("select coalesce(sum(t.amount), 0L) from Transfer t where t.settlementId = :settlementId and t.type = :type")
+    long sumBySettlementAndType(@Param("settlementId") Long settlementId, @Param("type") Transfer.Type type);
+
     /** 정산에 연결된 이체(결제일 정산·부족분 갚기·자동 정산)를 시간순으로 */
     List<Transfer> findBySettlementIdOrderByTransferredAtAscTransferIdAsc(Long settlementId);
 

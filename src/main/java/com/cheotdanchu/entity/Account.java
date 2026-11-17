@@ -28,4 +28,10 @@ public class Account {
     public void deposit(int amount) {
         balance += amount;
     }
+
+    /** 지난달까지 남은 돈으로 부족분을 갚는다: 계좌 전체 잔액과 지난달까지 남은 돈이 같이 줄어서 이번 달 쓸 수 있는 돈은 그대로다 */
+    public void payFromCarryover(int amount) {
+        balance -= amount;
+        carryoverBalance -= amount;
+    }
 }

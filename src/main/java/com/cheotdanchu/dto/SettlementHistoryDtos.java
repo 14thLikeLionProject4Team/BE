@@ -28,6 +28,7 @@ public final class SettlementHistoryDtos {
 
     /**
      * paidAmount 는 결제일에 이체된 금액(결제일 정산 이체의 합)이고, shortfallAmount 는 결제일에 부족했던 금액(나중에 갚았어도 그때의 부족액)이다.
+     * remainingShortfall 은 아직 갚을 부족분으로 일부를 갚았으면 그만큼 줄어든다 (결제일이 지나 부족이 남은 정산만 값이 있고 나머지는 0).
      * resolvedAt 은 정산이 끝난 시각으로 끝나지 않았으면 null.
      */
     public record Detail(
@@ -39,6 +40,7 @@ public final class SettlementHistoryDtos {
             long billedAmount,
             int paidAmount,
             long shortfallAmount,
+            long remainingShortfall,
             boolean isExcluded,
             LocalDateTime resolvedAt,
             List<TransferItem> transfers
