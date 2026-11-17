@@ -163,7 +163,7 @@ public class ChildPaymentService {
     /** 날짜순(최신 먼저) 한 페이지. 커서가 없으면 맨 앞부터 */
     private List<CardPayment> readByDate(View v, String cursor, PageRequest pageable) {
         Cursor<LocalDateTime> from = cursor == null ? new Cursor<>(FAR_FUTURE, Long.MAX_VALUE)
-                : decodeCursor(cursor, DATE_KIND, LocalDateTime::parse);
+                : decodeCursor(cursor, DATE_KIND, ChildPaymentService::cursorTime);
         return cardPaymentRepository.pageByDate(v.settlementId(), v.memberId(),
                 v.fromAt(), v.toBefore(), from.key(), from.id(), pageable);
     }
@@ -179,6 +179,16 @@ public class ChildPaymentService {
         String raw = byAmount ? AMOUNT_KIND + "|" + last.getAmount() + "|" + last.getPaymentId()
                 : DATE_KIND + "|" + last.getPaidAt() + "|" + last.getPaymentId();
         return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * 커서의 시각을 읽는다. DB 가 받는 연도(1~9999)를 벗어난 값은 쿼리가 DB 오류(500)가 되므로 여기서 걸러 400 이 되게 한다
+     * (던진 예외는 decodeCursor 가 400 으로 바꾼다).
+     */
+    private static LocalDateTime cursorTime(String s) {
+        LocalDateTime at = LocalDateTime.parse(s);
+        if (at.getYear() < 1 || at.getYear() > 9999) throw new IllegalArgumentException("커서 연도가 범위를 벗어났어요");
+        return at;
     }
 
     /** 풀어낸 커서: 그 정렬의 기준 값과 결제 ID */
