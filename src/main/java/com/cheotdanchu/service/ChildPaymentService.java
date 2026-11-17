@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Base64;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -48,6 +47,14 @@ public class ChildPaymentService {
 
     /** 지금 보는 아이, 이번 정산, 고른 기간(from 이상 to 이하의 날짜). 기간을 안 고르면 정산 기간 전체 */
     private record View(Member child, Settlement settlement, LocalDate from, LocalDate to) {
+
+        Long settlementId() {
+            return settlement.getSettlementId();
+        }
+
+        Long memberId() {
+            return child.getMemberId();
+        }
 
         LocalDateTime fromAt() {
             return from.atStartOfDay();
@@ -89,12 +96,7 @@ public class ChildPaymentService {
         View v = view.get();
 
         List<CardPaymentRepository.CategoryTotal> totals = cardPaymentRepository
-                .sumByCategory(v.settlement().getSettlementId(), v.child().getMemberId(), v.fromAt(), v.toBefore())
-                .stream()
-                .filter(t -> t.getAmount() != null && t.getAmount() > 0)
-                .sorted(Comparator.comparing(CardPaymentRepository.CategoryTotal::getAmount).reversed()
-                        .thenComparing(CardPaymentRepository.CategoryTotal::getCategory))
-                .toList();
+                .sumByCategory(v.settlementId(), v.memberId(), v.fromAt(), v.toBefore());
         long total = totals.stream().mapToLong(CardPaymentRepository.CategoryTotal::getAmount).sum();
 
         List<PaymentDtos.CategoryRatio> items = totals.stream()
@@ -104,7 +106,7 @@ public class ChildPaymentService {
     }
 
     /**
-     * 결제 요약: 이번 정산의 청구 예정액(취소 합산)과 결제 건수(취소 제외), 결제일. 진행 중인 정산이 없으면 null.
+     * 결제 요약: 이번 정산의 청구 예정액(취소 합산)과 결제 건수(취소된 결제는 뺀 순건수), 결제일. 진행 중인 정산이 없으면 null.
      * 자녀 홈의 현재 정산 조회와 같은 숫자여야 해서 그 계산을 그대로 쓴다 (자녀 확인도 거기서 한다).
      */
     public PaymentDtos.SummaryResponse getSummary(Long personaId) {
@@ -133,8 +135,8 @@ public class ChildPaymentService {
         Optional<View> view = view(child, from, to);
         if (view.isEmpty()) return new PaymentDtos.PaymentListResponse(List.of(), 0, null);
         View v = view.get();
-        Long settlementId = v.settlement().getSettlementId();
-        Long memberId = v.child().getMemberId();
+        Long settlementId = v.settlementId();
+        Long memberId = v.memberId();
         // 다음 페이지가 있는지 알려고 한 건을 더 읽는다
         PageRequest firstPlusOne = PageRequest.of(0, pageSize + 1);
         List<CardPayment> page = byAmount ? readByAmount(v, cursor, firstPlusOne) : readByDate(v, cursor, firstPlusOne);
@@ -154,7 +156,7 @@ public class ChildPaymentService {
     private List<CardPayment> readByAmount(View v, String cursor, PageRequest pageable) {
         Cursor<Integer> from = cursor == null ? new Cursor<>(Integer.MAX_VALUE, Long.MAX_VALUE)
                 : decodeCursor(cursor, AMOUNT_KIND, Integer::parseInt);
-        return cardPaymentRepository.pageByAmount(v.settlement().getSettlementId(), v.child().getMemberId(),
+        return cardPaymentRepository.pageByAmount(v.settlementId(), v.memberId(),
                 v.fromAt(), v.toBefore(), from.key(), from.id(), pageable);
     }
 
@@ -162,7 +164,7 @@ public class ChildPaymentService {
     private List<CardPayment> readByDate(View v, String cursor, PageRequest pageable) {
         Cursor<LocalDateTime> from = cursor == null ? new Cursor<>(FAR_FUTURE, Long.MAX_VALUE)
                 : decodeCursor(cursor, DATE_KIND, LocalDateTime::parse);
-        return cardPaymentRepository.pageByDate(v.settlement().getSettlementId(), v.child().getMemberId(),
+        return cardPaymentRepository.pageByDate(v.settlementId(), v.memberId(),
                 v.fromAt(), v.toBefore(), from.key(), from.id(), pageable);
     }
 

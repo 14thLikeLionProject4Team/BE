@@ -21,7 +21,7 @@ public class ChildPaymentController {
     private final ChildPaymentService childPaymentService;
 
     @Operation(summary = "결제 요약 조회",
-            description = "자녀 전용(부모는 403). 이번 정산의 청구 예정액(취소 합산), 결제 건수(취소 제외), 결제일. 진행 중인 정산이 없으면 에러가 아니라 data 가 null 입니다.")
+            description = "자녀 전용(부모는 403). 이번 정산의 청구 예정액(취소 합산), 결제 건수(취소된 결제는 뺀 순건수), 결제일. 진행 중인 정산이 없으면 에러가 아니라 data 가 null 입니다.")
     @GetMapping("/child/payments/summary")
     public ApiResponse<PaymentDtos.SummaryResponse> getSummary(@RequestHeader("X-Persona-Id") Long personaId) {
         return ApiResponse.onSuccess(SuccessStatus.PAYMENT_SUMMARY_OK, childPaymentService.getSummary(personaId));

@@ -15,7 +15,7 @@ public final class PaymentDtos {
     /** ratio 는 전체 대비 비중(%)으로 소수 첫째 자리까지 */
     public record CategoryRatio(String category, long amount, double ratio) {}
 
-    /** 화면 위의 "청구 예정 79,500원 14건"과 결제일에 쓰는 값. billedAmount 는 취소를 합산한 값이고 paymentCount 는 취소를 뺀 건수 */
+    /** 화면 위의 "청구 예정 79,500원 14건"과 결제일에 쓰는 값. billedAmount 는 취소를 합산한 값이고 paymentCount 는 취소된 결제를 뺀 순건수 */
     public record SummaryResponse(
             Long settlementId,
             LocalDate periodStart,

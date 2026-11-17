@@ -22,12 +22,14 @@ public interface CardPaymentRepository extends JpaRepository<CardPayment, Long> 
     @Query("select coalesce(sum(case when p.canceled = true then -1L else 1L end), 0L) from CardPayment p where p.settlementId = :settlementId")
     long countNetPayments(@Param("settlementId") Long settlementId);
 
-    /** 카테고리별 합계. 취소(마이너스)를 그대로 합산해서, 전체 합이 청구 예정액과 같다. from 이상 to 미만 */
+    /** 카테고리별 합계, 큰 금액순. 취소(마이너스)를 합산해서 전체 합이 청구 예정액과 같고, 합계가 0 이하가 된 카테고리는 뺀다. from 이상 to 미만 */
     @Query("""
             select p.category as category, sum(p.amount) as amount
             from CardPayment p
             where p.settlementId = :settlementId and p.memberId = :memberId and p.paidAt >= :from and p.paidAt < :to
             group by p.category
+            having sum(p.amount) > 0
+            order by sum(p.amount) desc, p.category
             """)
     List<CategoryTotal> sumByCategory(@Param("settlementId") Long settlementId, @Param("memberId") Long memberId,
                                       @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
