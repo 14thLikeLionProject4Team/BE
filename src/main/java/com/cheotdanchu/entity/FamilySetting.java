@@ -8,6 +8,7 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -41,13 +42,25 @@ public class FamilySetting {
     /** 카드 한도 (카드사가 정하므로 보기만 한다). 정해지지 않았으면 null */
     private Integer cardLimit;
 
-    public enum Visibility { TOTAL_ONLY }
+    /** 부모가 아이 거래를 보는 범위. 지금은 총액만 있다 */
+    @Getter
+    @RequiredArgsConstructor
+    public enum Visibility {
+        TOTAL_ONLY("총액만");
+
+        private final String label;
+    }
 
     /** 용돈 정하기에서 저장한 보내는 날·자동이체·결제일 */
     public void updateAllowanceSettings(int allowanceDay, boolean autoTransfer, int settlementDay) {
         this.allowanceDay = allowanceDay;
         this.autoTransfer = autoTransfer;
         this.settlementDay = settlementDay;
+    }
+
+    /** 열람 범위를 바꾼다 */
+    public void updateVisibility(Visibility visibility) {
+        this.visibility = visibility;
     }
 
     /** 미션 상한(용돈 대비 %)을 바꾼다 */
