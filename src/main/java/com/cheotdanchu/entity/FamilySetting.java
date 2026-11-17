@@ -38,6 +38,9 @@ public class FamilySetting {
     @JdbcTypeCode(SqlTypes.TINYINT)
     private int missionCapRate;
 
+    /** 카드 한도 (카드사가 정하므로 보기만 한다). 정해지지 않았으면 null */
+    private Integer cardLimit;
+
     public enum Visibility { TOTAL_ONLY }
 
     /** 용돈 정하기에서 저장한 보내는 날·자동이체·결제일 */

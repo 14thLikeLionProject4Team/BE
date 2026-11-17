@@ -68,11 +68,7 @@ public class AllowanceSettingService {
     public AllowanceSetupDtos.SetupResponse getSetup(Long personaId, Long childId) {
         Member parent = parent(personaId);
         Long familyId = parent.getFamily().getFamilyId();
-        if (childId != null) {
-            memberRepository.findById(childId)
-                    .filter(m -> m.getRole() == Member.Role.CHILD && m.getFamily().getFamilyId().equals(familyId))
-                    .orElseThrow(() -> new GeneralException(ErrorStatus.PERSONA_NOT_FOUND));
-        }
+        if (childId != null) memberRepository.getChildOfFamily(parent, childId);
 
         FamilySetting setting = familySettingRepository.findById(familyId)
                 .orElseThrow(() -> new GeneralException(ErrorStatus.FAMILY_SETTING_NOT_FOUND));

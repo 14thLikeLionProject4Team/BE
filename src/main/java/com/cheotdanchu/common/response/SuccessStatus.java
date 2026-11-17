@@ -47,6 +47,8 @@ public enum SuccessStatus {
     ACCOUNTS_OK(200, "조회 성공"),
     CHILD_MY_OK(200, "조회 성공"),
     PARENT_MY_OK(200, "조회 성공"),
+    PROMISE_OK(200, "조회 성공"),
+    ADULT_TRANSITION_OK(200, "조회 성공"),
     DAILY_SPENDING_OK(200, "조회 성공"),
     CERTIFICATE_ELIGIBILITY_OK(200, "조회 성공"),
     CERTIFICATE_PREVIEW_OK(200, "조회 성공"),

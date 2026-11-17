@@ -27,6 +27,9 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
 
     long countByFamilyIdAndStatusNot(Long familyId, Settlement.Status excluded);
 
+    /** 그날(종료일 기준)까지 끝난 정산 수 */
+    long countByFamilyIdAndStatusAndPeriodEndLessThanEqual(Long familyId, Settlement.Status status, LocalDate periodEnd);
+
     /** 정산 상태를 바꾸는 요청(부족분 갚기)에서 쓴다. 행에 쓰기 잠금을 걸어서 같은 정산의 동시 요청이 한 줄로 처리되게 한다 */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from Settlement s where s.settlementId = :id")
