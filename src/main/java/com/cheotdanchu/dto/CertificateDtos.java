@@ -1,6 +1,7 @@
 package com.cheotdanchu.dto;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public final class CertificateDtos {
 
@@ -14,4 +15,17 @@ public final class CertificateDtos {
             int settlementRequired,
             boolean canIssue,
             LocalDate availableFrom) {} // 두 요건이 모두 채워지는 날 (추정). 이미 발급할 수 있으면 null
+
+    /** 가장 최근에 발급한 확인서와 만료 여부 */
+    public record LatestResponse(
+            Long certificateId,
+            int fullPaidMonths,
+            int totalMonths,
+            int maxStreak,
+            double avgMarginRate,
+            int selfResolvedCount,
+            int shortfallCount,
+            LocalDateTime issuedAt,
+            LocalDateTime expiresAt,
+            boolean expired) {}
 }
