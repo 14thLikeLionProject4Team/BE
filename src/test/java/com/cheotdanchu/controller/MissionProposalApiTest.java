@@ -95,6 +95,16 @@ class MissionProposalApiTest {
     }
 
     @Test
+    void 부모_화면_추천은_열_수_있고_자녀_화면_추천은_409() throws Exception {
+        mockMvc.perform(patch("/missions/8/open").header("X-Persona-Id", 1)
+                        .contentType(MediaType.APPLICATION_JSON).content(openBody(3000)))
+                .andExpect(jsonPath("$.data.status").value("NEW"));
+        mockMvc.perform(patch("/missions/5/open").header("X-Persona-Id", 1)
+                        .contentType(MediaType.APPLICATION_JSON).content(openBody(3000)))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void 보류한_제안은_다시_보류할_수_없지만_열_수는_있다() throws Exception {
         mockMvc.perform(patch("/missions/4/hold").header("X-Persona-Id", 1))
                 .andExpect(status().isOk())

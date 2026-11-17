@@ -67,6 +67,10 @@ class MissionUpdateApiTest {
         update(1, 4, "{\"title\":\"바꾸기\"}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("아직 열지 않은 미션은 '열기'에서 정해 주세요."));
+        // 부모가 열 수 없는 자녀 화면 추천도 '끝난 미션'이 아니라 아직 안 연 미션
+        update(1, 5, "{\"title\":\"바꾸기\"}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("아직 열지 않은 미션은 '열기'에서 정해 주세요."));
     }
 
     @Test
@@ -129,6 +133,15 @@ class MissionUpdateApiTest {
                 .andExpect(jsonPath("$.message").value("바꿀 내용을 보내 주세요."));
         update(1, 3, "{\"title\":\"  \"}").andExpect(status().isBadRequest());
         update(1, 3, "{\"rewardAmount\":0}").andExpect(status().isBadRequest());
+        update(1, 3, "{\"criteria\":\"   \"}").andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 보상을_내리는_건_한도를_넘어도_된다() throws Exception {
+        jdbc.update("UPDATE missions SET reward_amount = 20000 WHERE mission_id = 3");
+
+        update(1, 3, "{\"rewardAmount\":19000}").andExpect(status().isOk());
+        update(1, 3, "{\"rewardAmount\":19500}").andExpect(status().isUnprocessableContent());
     }
 
     @Test

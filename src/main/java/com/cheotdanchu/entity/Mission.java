@@ -63,6 +63,9 @@ public class Mission {
     @Column(insertable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /** 취소한 날 (데모 기준일). 종료 미션 목록의 끝난 날로 쓴다 */
+    private LocalDate canceledAt;
+
     /** 부모가 만든 미션은 바로 열린다 (NEW) */
     public static Mission createByParent(Family family, MissionCreateRequest req) {
         Mission m = new Mission();
@@ -90,9 +93,14 @@ public class Mission {
         return m;
     }
 
-    /** 제안(보류 포함)·추천 미션만 부모가 열 수 있다 */
-    public boolean canOpen() {
+    /** 아직 열지 않은 제안·보류·추천 미션 (수정·취소 대신 '열기'로 정한다) */
+    public boolean isNotOpenedYet() {
         return status == Status.PROPOSED || status == Status.ON_HOLD || status == Status.RECOMMENDED;
+    }
+
+    /** 그중 부모가 열 수 있는 것: 자녀 화면 추천은 아이가 제안(PROPOSED)해야 열린다 */
+    public boolean canOpen() {
+        return isNotOpenedYet() && !(status == Status.RECOMMENDED && recommendTo == RecommendTo.CHILD);
     }
 
     /** 부모가 내용을 채워서 연다 ("금액 정해서 열기"). 출처(아이 제안·AI 추천)는 그대로 둔다 */
@@ -122,11 +130,6 @@ public class Mission {
         status = Status.ON_HOLD;
     }
 
-    /** 아직 열지 않은 제안·보류·추천 미션 (수정·취소 대신 '열기'로 정한다) */
-    public boolean isNotOpenedYet() {
-        return status == Status.PROPOSED || status == Status.ON_HOLD || status == Status.RECOMMENDED;
-    }
-
     /** 새 미션·진행 중·확인 대기 미션만 부모가 고칠 수 있다 (끝난 미션, 아직 열지 않은 제안·추천은 안 됨) */
     public boolean canEdit() {
         return status == Status.NEW || status == Status.IN_PROGRESS || status == Status.SUBMITTED;
@@ -148,8 +151,9 @@ public class Mission {
         return status == Status.NEW || status == Status.IN_PROGRESS;
     }
 
-    public void cancel() {
+    public void cancel(LocalDate today) {
         status = Status.CANCELED;
+        canceledAt = today;
     }
 
     private void fill(MissionCreateRequest req) {

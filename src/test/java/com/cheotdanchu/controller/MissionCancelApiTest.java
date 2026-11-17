@@ -34,7 +34,8 @@ class MissionCancelApiTest {
                 .andExpect(jsonPath("$.data.status").value("CANCELED"));
 
         mockMvc.perform(get("/missions").param("status", "ended").header("X-Persona-Id", 1))
-                .andExpect(jsonPath("$.data.missions[?(@.missionId == 3)].status").value("CANCELED"));
+                .andExpect(jsonPath("$.data.missions[?(@.missionId == 3)].status").value("CANCELED"))
+                .andExpect(jsonPath("$.data.missions[?(@.missionId == 3)].endedAt").value("2026-10-19"));
         mockMvc.perform(get("/missions").param("status", "active").header("X-Persona-Id", 1))
                 .andExpect(jsonPath("$.data.missions[?(@.missionId == 3)]").isEmpty());
     }

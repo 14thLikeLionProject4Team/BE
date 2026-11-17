@@ -180,6 +180,7 @@ public class MissionService {
         Member parent = parent(personaId);
         if (req.isEmpty()) throw new GeneralException(ErrorStatus.INVALID_INPUT, "바꿀 내용을 보내 주세요.");
         if (req.title() != null && req.title().isBlank()) throw new GeneralException(ErrorStatus.INVALID_INPUT, "미션 이름을 입력해 주세요.");
+        if (req.criteria() != null && req.criteria().isBlank()) throw new GeneralException(ErrorStatus.INVALID_INPUT, "완료 기준을 입력해 주세요.");
 
         Mission mission = familyMissionForUpdate(parent, missionId);
         if (mission.isNotOpenedYet()) throw new GeneralException(ErrorStatus.MISSION_NOT_EDITABLE, NOT_OPENED_YET);
@@ -193,9 +194,13 @@ public class MissionService {
         if (req.endDate() != null && mission.getStartDate() != null && req.endDate().isBefore(mission.getStartDate())) {
             throw new GeneralException(ErrorStatus.INVALID_PERIOD);
         }
-        if (req.rewardAmount() != null) checkRewardCap(parent, childOf(parent), req.rewardAmount());
+        // 보상을 올릴 때만 한도 검사 (내리는 건 한도에 가까워도 막지 않는다)
+        if (req.rewardAmount() != null && (mission.getRewardAmount() == null || req.rewardAmount() > mission.getRewardAmount())) {
+            checkRewardCap(parent, childOf(parent), req.rewardAmount());
+        }
 
-        mission.edit(req.title() == null ? null : req.title().strip(), req.criteria(), req.rewardAmount(), req.endDate());
+        mission.edit(req.title() == null ? null : req.title().strip(),
+                req.criteria() == null ? null : req.criteria().strip(), req.rewardAmount(), req.endDate());
         if (mission.getStatus() == Mission.Status.IN_PROGRESS) {
             mission.afterApproval((int) submissionRepository.countByMission_MissionIdAndReviewStatus(
                     mission.getMissionId(), MissionSubmission.ReviewStatus.APPROVED));
@@ -213,7 +218,7 @@ public class MissionService {
             throw new GeneralException(ErrorStatus.MISSION_NOT_CANCELABLE, "아이가 낸 완료를 먼저 확인해 주세요.");
         }
         if (!mission.canCancel()) throw new GeneralException(ErrorStatus.MISSION_NOT_CANCELABLE);
-        mission.cancel();
+        mission.cancel(seedRepository.today());
         return new MissionCreateResponse(mission.getMissionId(), mission.getStatus());
     }
 
@@ -446,8 +451,9 @@ public class MissionService {
         return new MissionQueryDtos.EndedListResponse(missions, hasNext ? missions.get(missions.size() - 1).missionId() : null);
     }
 
-    /** 끝난 날: 완료된 미션은 마지막 승인일, 그 외(취소·만료)는 마감일 */
+    /** 끝난 날: 완료된 미션은 마지막 승인일, 취소한 미션은 취소한 날, 그 외(만료)는 마감일 */
     private LocalDate endedAt(Mission m) {
+        if (m.getStatus() == Mission.Status.CANCELED && m.getCanceledAt() != null) return m.getCanceledAt();
         return submissionRepository
                 .findFirstByMission_MissionIdAndReviewStatusOrderByReviewedAtDesc(m.getMissionId(), MissionSubmission.ReviewStatus.APPROVED)
                 .filter(s -> m.getStatus() == Mission.Status.COMPLETED && s.getReviewedAt() != null)
