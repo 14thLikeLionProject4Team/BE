@@ -168,6 +168,7 @@ class SettlementHistoryApiTest {
                 .andExpect(jsonPath("$.data.result").value("FULL_PAID"))
                 .andExpect(jsonPath("$.data.billedAmount").value(61500))
                 .andExpect(jsonPath("$.data.paidAmount").value(61500))
+                .andExpect(jsonPath("$.data.remainingShortfall").value(0))
                 .andExpect(jsonPath("$.data.shortfallAmount").value(0))
                 .andExpect(jsonPath("$.data.isExcluded").value(false))
                 .andExpect(jsonPath("$.data.resolvedAt").value("2026-09-25T18:00:00"))
@@ -184,6 +185,7 @@ class SettlementHistoryApiTest {
                 .andExpect(jsonPath("$.data.result").value("AUTO_DEDUCTED"))
                 .andExpect(jsonPath("$.data.billedAmount").value(75200))
                 .andExpect(jsonPath("$.data.paidAmount").value(70000))
+                .andExpect(jsonPath("$.data.remainingShortfall").value(0))
                 .andExpect(jsonPath("$.data.shortfallAmount").value(5200))
                 .andExpect(jsonPath("$.data.resolvedAt").value("2026-04-01T09:00:00"))
                 .andExpect(jsonPath("$.data.transfers.length()").value(2))
@@ -199,6 +201,7 @@ class SettlementHistoryApiTest {
         // 직접 송금한 달
         detail(4, settlementOf(2, "2024-10-25"))
                 .andExpect(jsonPath("$.data.result").value("SELF_RESOLVED"))
+                .andExpect(jsonPath("$.data.remainingShortfall").value(0))
                 .andExpect(jsonPath("$.data.shortfallAmount").value(4600))
                 .andExpect(jsonPath("$.data.transfers[1].type").value("SHORTFALL_PAYMENT"))
                 .andExpect(jsonPath("$.data.transfers[1].source").value("DIRECT"))
@@ -220,6 +223,7 @@ class SettlementHistoryApiTest {
                 .andExpect(jsonPath("$.data.result").value(nullValue()))
                 .andExpect(jsonPath("$.data.billedAmount").value(79500))
                 .andExpect(jsonPath("$.data.paidAmount").value(0))
+                .andExpect(jsonPath("$.data.remainingShortfall").value(0))
                 .andExpect(jsonPath("$.data.shortfallAmount").value(0))
                 .andExpect(jsonPath("$.data.resolvedAt").value(nullValue()))
                 .andExpect(jsonPath("$.data.transfers").isEmpty());
@@ -265,6 +269,7 @@ class SettlementHistoryApiTest {
         detail(2, openSettlement())
                 .andExpect(jsonPath("$.data.status").value("REQUIRED"))
                 .andExpect(jsonPath("$.data.billedAmount").value(79500))
+                .andExpect(jsonPath("$.data.remainingShortfall").value(0))
                 .andExpect(jsonPath("$.data.shortfallAmount").value(0));
     }
 
@@ -277,10 +282,11 @@ class SettlementHistoryApiTest {
                 .andExpect(jsonPath("$.data.result").value(nullValue()))
                 .andExpect(jsonPath("$.data.billedAmount").value(79500))
                 .andExpect(jsonPath("$.data.paidAmount").value(70000))
+                .andExpect(jsonPath("$.data.remainingShortfall").value(9500))
                 .andExpect(jsonPath("$.data.shortfallAmount").value(9500))
                 .andExpect(jsonPath("$.data.resolvedAt").value(nullValue()));
         jdbc.update("UPDATE settlements SET status = 'PARTIAL' WHERE settlement_id = ?", id);
-        detail(2, id).andExpect(jsonPath("$.data.shortfallAmount").value(9500));
+        detail(2, id).andExpect(jsonPath("$.data.shortfallAmount").value(9500)).andExpect(jsonPath("$.data.remainingShortfall").value(9500));
     }
 
     @Test
@@ -289,6 +295,7 @@ class SettlementHistoryApiTest {
 
         detail(2, id)
                 .andExpect(jsonPath("$.data.billedAmount").value(79500))
+                .andExpect(jsonPath("$.data.remainingShortfall").value(9500))
                 .andExpect(jsonPath("$.data.shortfallAmount").value(9500));
     }
 
@@ -300,6 +307,7 @@ class SettlementHistoryApiTest {
 
         detail(2, autoDeducted)
                 .andExpect(jsonPath("$.data.paidAmount").value(70000))
+                .andExpect(jsonPath("$.data.remainingShortfall").value(0))
                 .andExpect(jsonPath("$.data.shortfallAmount").value(5200));
     }
 

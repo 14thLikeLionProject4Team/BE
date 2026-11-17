@@ -85,12 +85,13 @@ public class SettlementHistoryService {
         // 바뀔 수 있어서 쓰지 않는다 (쓰면 부족분을 갚은 달이 "청구액 전부 이체, 부족 0"으로 보이고 이체 내역과 어긋난다)
         int paidAtDue = transfers.stream().filter(t -> t.getType() == Transfer.Type.SETTLEMENT).mapToInt(Transfer::getAmount).sum();
         long shortfall = SHORTFALL_KNOWN_STATUSES.contains(s.getStatus()) ? Math.max(billed - paidAtDue, 0) : 0;
+        long repaid = transfers.stream().filter(t -> t.getType() == Transfer.Type.SHORTFALL_PAYMENT).mapToLong(Transfer::getAmount).sum();
 
         List<SettlementHistoryDtos.TransferItem> items = transfers.stream()
                 .map(t -> new SettlementHistoryDtos.TransferItem(t.getType(), t.getSource(), t.getAmount(), t.getTransferredAt()))
                 .toList();
         return new SettlementHistoryDtos.Detail(s.getSettlementId(), s.getPeriodStart(), s.getPeriodEnd(), s.getStatus(), s.getResult(),
-                billed, paidAtDue, shortfall, s.isExcluded(), s.getResolvedAt(), items);
+                billed, paidAtDue, shortfall, s.remainingShortfall(billed, paidAtDue, repaid), s.isExcluded(), s.getResolvedAt(), items);
     }
 
     /** 정산 종료일은 가족마다 하나씩이라 다음 페이지를 이을 기준으로 쓴다 */

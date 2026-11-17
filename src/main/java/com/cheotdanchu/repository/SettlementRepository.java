@@ -1,8 +1,12 @@
 package com.cheotdanchu.repository;
 
 import com.cheotdanchu.entity.Settlement;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -22,6 +26,11 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
             Long familyId, Settlement.Status excluded, LocalDate before, Pageable pageable);
 
     long countByFamilyIdAndStatusNot(Long familyId, Settlement.Status excluded);
+
+    /** 정산 상태를 바꾸는 요청(부족분 갚기)에서 쓴다. 행에 쓰기 잠금을 걸어서 같은 정산의 동시 요청이 한 줄로 처리되게 한다 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from Settlement s where s.settlementId = :id")
+    Optional<Settlement> findByIdForUpdate(@Param("id") Long id);
 
     /** 가족의 "현재 정산". 자녀 홈·부모 홈이 모두 이 메서드로 현재 정산을 정해서, 서로 다른 정산을 보는 일이 없게 한다 */
     default Optional<Settlement> findCurrent(Long familyId, LocalDate today) {
