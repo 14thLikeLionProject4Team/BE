@@ -50,7 +50,40 @@ class BriefingApiTest {
     }
 
     @Test
+    void 브리핑_목록은_최신순으로_첫_줄만_준다() throws Exception {
+        mockMvc.perform(get("/briefings").header("X-Persona-Id", 1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("브리핑 목록 조회 성공"))
+                .andExpect(jsonPath("$.data.totalCount").value(6))
+                .andExpect(jsonPath("$.data.briefings.length()").value(6))
+                .andExpect(jsonPath("$.data.briefings[0].targetMonth").value("2026-09"))
+                .andExpect(jsonPath("$.data.briefings[0].firstLine").value("9월에는 61,500원을 썼어요."))
+                .andExpect(jsonPath("$.data.briefings[0].isNew").value(true))
+                .andExpect(jsonPath("$.data.briefings[1].targetMonth").value("2026-08"))
+                .andExpect(jsonPath("$.data.briefings[1].isNew").value(false))
+                .andExpect(jsonPath("$.data.nextCursor").value(nullValue()));
+    }
+
+    @Test
+    void 브리핑_목록은_12개씩_커서로_넘긴다() throws Exception {
+        for (int m = 1; m <= 9; m++) {
+            jdbc.update("INSERT INTO briefings (family_id, target_month, spent_line) VALUES (1, ?, '썼어요')", "2025-0" + m);
+        }
+        String body = mockMvc.perform(get("/briefings").header("X-Persona-Id", 1))
+                .andExpect(jsonPath("$.data.totalCount").value(15))
+                .andExpect(jsonPath("$.data.briefings.length()").value(12))
+                .andReturn().getResponse().getContentAsString();
+        Number cursor = com.jayway.jsonpath.JsonPath.read(body, "$.data.nextCursor");
+
+        mockMvc.perform(get("/briefings").param("cursor", cursor.toString()).header("X-Persona-Id", 1))
+                .andExpect(jsonPath("$.data.briefings.length()").value(3))
+                .andExpect(jsonPath("$.data.nextCursor").value(nullValue()));
+    }
+
+    @Test
     void 자녀는_403_성년_전환한_가족의_부모도_403() throws Exception {
+        mockMvc.perform(get("/briefings").header("X-Persona-Id", 2)).andExpect(status().isForbidden());
+        mockMvc.perform(get("/briefings").header("X-Persona-Id", 3)).andExpect(status().isForbidden());
         mockMvc.perform(get("/briefings/latest").header("X-Persona-Id", 2)).andExpect(status().isForbidden());
         mockMvc.perform(get("/briefings/latest").header("X-Persona-Id", 3))
                 .andExpect(status().isForbidden())

@@ -13,6 +13,7 @@ public enum SuccessStatus {
     PARENT_HOME_OK(200, "부모 홈 조회 성공"),
     DECISIONS_OK(200, "결정 카드 조회 성공"),
     BRIEFING_OK(200, "브리핑 조회 성공"),
+    BRIEFING_LIST_OK(200, "브리핑 목록 조회 성공"),
     MESSAGE_SENT(201, "메시지 전송 성공"),
     CONVERSATION_STARTER_OK(200, "대화 시작 정보 조회 성공"),
     CONVERSATION_MESSAGES_OK(200, "대화 기록 조회 성공"),

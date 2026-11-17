@@ -3,6 +3,7 @@ package com.cheotdanchu.dto;
 import com.cheotdanchu.entity.Briefing;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /** 월간 브리핑 응답 */
 public final class BriefingDtos {
@@ -15,6 +16,15 @@ public final class BriefingDtos {
             return new Detail(b.getBriefingId(), b.getTargetMonth(), b.getReadAt() == null,
                     new Lines(b.getSpentLine(), b.getSavedLine(), b.getChangedLine(), b.getGoodLine(), b.getTogetherLine()),
                     b.getCreatedAt());
+        }
+    }
+
+    public record ListResponse(long totalCount, List<Item> briefings, Long nextCursor) {}
+
+    /** 목록에서는 첫 줄(쓴 돈)만 보여준다 */
+    public record Item(Long briefingId, String targetMonth, String firstLine, boolean isNew) {
+        public static Item of(Briefing b) {
+            return new Item(b.getBriefingId(), b.getTargetMonth(), b.getSpentLine(), b.getReadAt() == null);
         }
     }
 
