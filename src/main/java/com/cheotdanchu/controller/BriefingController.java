@@ -1,0 +1,24 @@
+package com.cheotdanchu.controller;
+
+import com.cheotdanchu.common.response.ApiResponse;
+import com.cheotdanchu.common.response.SuccessStatus;
+import com.cheotdanchu.dto.BriefingDtos;
+import com.cheotdanchu.service.BriefingService;
+import io.swagger.v3.oas.annotations.Operation;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequiredArgsConstructor
+public class BriefingController {
+
+    private final BriefingService briefingService;
+
+    @Operation(summary = "최신 브리핑 조회", description = "부모 전용. 가장 최근 월간 브리핑의 다섯 줄(쓴 돈·남긴 돈·달라진 점·잘한 점·같이 이야기할 것). isNew = 아직 읽지 않음. 브리핑이 없으면 data null. 아이가 만 19세가 된 뒤에는 403.")
+    @GetMapping("/briefings/latest")
+    public ApiResponse<BriefingDtos.Detail> getLatest(@RequestHeader("X-Persona-Id") Long personaId) {
+        return ApiResponse.onSuccess(SuccessStatus.BRIEFING_OK, briefingService.getLatest(personaId));
+    }
+}
