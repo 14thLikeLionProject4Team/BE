@@ -19,7 +19,8 @@ public final class BriefingDtos {
         }
     }
 
-    public record ListResponse(long totalCount, List<Item> briefings, Long nextCursor) {}
+    /** nextCursor: 다음 페이지를 부를 때 보낼 대상 달 (마지막이면 null) */
+    public record ListResponse(long totalCount, List<Item> briefings, String nextCursor) {}
 
     /** 목록에서는 첫 줄(쓴 돈)만 보여준다 */
     public record Item(Long briefingId, String targetMonth, String firstLine, boolean isNew) {

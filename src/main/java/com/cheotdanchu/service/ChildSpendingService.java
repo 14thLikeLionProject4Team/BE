@@ -31,7 +31,6 @@ import java.util.Optional;
 @Transactional(readOnly = true)
 public class ChildSpendingService {
 
-    private static final int ADULT_AGE = 19;
     private static final String NOTICE = "결과는 결제일에 알려드려요";
 
     private final MemberRepository memberRepository;
@@ -54,7 +53,7 @@ public class ChildSpendingService {
 
         LocalDate today = seedRepository.today();
         // 만 19세가 된 뒤의 기록은 본인만 본다 (부모에게는 성년 전환 카드만)
-        if (!child.getBirthDate().plusYears(ADULT_AGE).isAfter(today)) {
+        if (child.isAdultOn(today)) {
             throw new GeneralException(ErrorStatus.ADULT_TRANSITIONED);
         }
 

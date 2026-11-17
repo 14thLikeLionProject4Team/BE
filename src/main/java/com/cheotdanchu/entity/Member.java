@@ -13,6 +13,8 @@ import java.time.LocalDate;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Member {
 
+    private static final int ADULT_AGE = 19;
+
     @Id
     private Long memberId;
 
@@ -32,6 +34,15 @@ public class Member {
 
     @Column(length = 50)
     private String relation;
+
+    /** 만 19세가 되는 날. 이날부터 기록이 본인에게 넘어간다 (부모에게는 성년 전환 표시만) */
+    public LocalDate adultDay() {
+        return birthDate.plusYears(ADULT_AGE);
+    }
+
+    public boolean isAdultOn(LocalDate today) {
+        return !adultDay().isAfter(today);
+    }
 
     public enum Role { PARENT, CHILD }
 }

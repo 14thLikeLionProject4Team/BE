@@ -9,6 +9,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -74,11 +75,23 @@ class BriefingApiTest {
                 .andExpect(jsonPath("$.data.totalCount").value(15))
                 .andExpect(jsonPath("$.data.briefings.length()").value(12))
                 .andReturn().getResponse().getContentAsString();
-        Number cursor = com.jayway.jsonpath.JsonPath.read(body, "$.data.nextCursor");
+        String cursor = com.jayway.jsonpath.JsonPath.read(body, "$.data.nextCursor");
+        assertEquals("2025-04", cursor);
 
-        mockMvc.perform(get("/briefings").param("cursor", cursor.toString()).header("X-Persona-Id", 1))
+        mockMvc.perform(get("/briefings").param("cursor", cursor).header("X-Persona-Id", 1))
                 .andExpect(jsonPath("$.data.briefings.length()").value(3))
                 .andExpect(jsonPath("$.data.nextCursor").value(nullValue()));
+    }
+
+    @Test
+    void 앞_달_브리핑을_나중에_만들어도_최신_브리핑과_목록_첫_항목이_같다() throws Exception {
+        jdbc.update("INSERT INTO briefings (family_id, target_month, spent_line) VALUES (1, '2026-03', '3월에는 75,200원을 썼어요.')");
+
+        mockMvc.perform(get("/briefings/latest").header("X-Persona-Id", 1))
+                .andExpect(jsonPath("$.data.targetMonth").value("2026-09"));
+        mockMvc.perform(get("/briefings").header("X-Persona-Id", 1))
+                .andExpect(jsonPath("$.data.briefings[0].targetMonth").value("2026-09"))
+                .andExpect(jsonPath("$.data.briefings[6].targetMonth").value("2026-03"));
     }
 
     @Test

@@ -31,9 +31,6 @@ import java.util.Locale;
 @Transactional(readOnly = true)
 public class ParentHomeService {
 
-    /** 만 19세가 되면 기록이 본인에게 넘어간다 (부모에게는 성년 전환 표시만) */
-    private static final int ADULT_AGE = 19;
-
     private final MemberRepository memberRepository;
     private final FamilySettingRepository familySettingRepository;
     private final NotificationRepository notificationRepository;
@@ -49,8 +46,8 @@ public class ParentHomeService {
         Member child = childOf(parent);
 
         LocalDate today = seedRepository.today();
-        LocalDate adultDay = child.getBirthDate().plusYears(ADULT_AGE);
-        boolean adult = !adultDay.isAfter(today);
+        LocalDate adultDay = child.adultDay();
+        boolean adult = child.isAdultOn(today);
         FamilySetting.Visibility visibility = familySettingRepository.findById(familyId)
                 .map(FamilySetting::getVisibility)
                 .orElse(FamilySetting.Visibility.TOTAL_ONLY);

@@ -25,11 +25,11 @@ public class BriefingController {
         return ApiResponse.onSuccess(SuccessStatus.BRIEFING_OK, briefingService.getLatest(personaId));
     }
 
-    @Operation(summary = "브리핑 목록", description = "부모 전용. 지난 브리핑 최신순, 12개씩(첫 줄만). cursor는 이전 페이지의 nextCursor. 아이가 만 19세가 된 뒤에는 403.")
+    @Operation(summary = "브리핑 목록", description = "부모 전용. 지난 브리핑 최근 달 순, 12개씩(첫 줄만). cursor는 이전 페이지의 nextCursor(대상 달, 예: 2026-04). 아이가 만 19세가 된 뒤에는 403.")
     @GetMapping("/briefings")
     public ApiResponse<BriefingDtos.ListResponse> getBriefings(
             @RequestHeader("X-Persona-Id") Long personaId,
-            @RequestParam(required = false) Long cursor) {
+            @RequestParam(required = false) String cursor) {
         return ApiResponse.onSuccess(SuccessStatus.BRIEFING_LIST_OK, briefingService.getBriefings(personaId, cursor));
     }
 

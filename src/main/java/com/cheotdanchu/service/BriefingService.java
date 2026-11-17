@@ -25,7 +25,6 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class BriefingService {
 
-    private static final int ADULT_AGE = 19;
     private static final int PAGE_SIZE = 12;
 
     private final MemberRepository memberRepository;
@@ -40,15 +39,18 @@ public class BriefingService {
                 .orElse(null);
     }
 
-    /** 지난 브리핑 최신순, 12개씩 (부모 마이의 지난 브리핑에서도 쓴다) */
-    public BriefingDtos.ListResponse getBriefings(Long personaId, Long cursor) {
+    /**
+     * 지난 브리핑 최근 달 순, 12개씩 (부모 마이의 지난 브리핑에서도 쓴다). 최신 브리핑과 같은 기준(대상 달)이라
+     * 앞 달 브리핑이 나중에 만들어져도 목록 첫 항목 = 최신 브리핑. cursor는 이전 페이지의 nextCursor(대상 달)
+     */
+    public BriefingDtos.ListResponse getBriefings(Long personaId, String cursor) {
         Long familyId = parentBeforeAdult(personaId).getFamily().getFamilyId();
-        List<Briefing> page = briefingRepository.findByFamilyIdAndBriefingIdLessThanOrderByBriefingIdDesc(
-                familyId, cursor == null ? Long.MAX_VALUE : cursor, PageRequest.of(0, PAGE_SIZE + 1));
+        List<Briefing> page = briefingRepository.findByFamilyIdAndTargetMonthLessThanOrderByTargetMonthDesc(
+                familyId, cursor == null ? "9999-99" : cursor, PageRequest.of(0, PAGE_SIZE + 1));
         boolean hasNext = page.size() > PAGE_SIZE;
         List<BriefingDtos.Item> items = page.stream().limit(PAGE_SIZE).map(BriefingDtos.Item::of).toList();
         return new BriefingDtos.ListResponse(briefingRepository.countByFamilyId(familyId), items,
-                hasNext ? items.get(items.size() - 1).briefingId() : null);
+                hasNext ? items.get(items.size() - 1).targetMonth() : null);
     }
 
     /** 내 가족 브리핑만 읽음 처리한다. 다른 가족 것은 404, 이미 읽었어도 성공 */
@@ -66,7 +68,7 @@ public class BriefingService {
         Member parent = memberRepository.getPersona(personaId);
         if (parent.getRole() != Member.Role.PARENT) throw new GeneralException(ErrorStatus.PARENT_ONLY);
         boolean adult = memberRepository.findByFamily_FamilyIdAndRole(parent.getFamily().getFamilyId(), Member.Role.CHILD)
-                .map(child -> !child.getBirthDate().plusYears(ADULT_AGE).isAfter(seedRepository.today()))
+                .map(child -> child.isAdultOn(seedRepository.today()))
                 .orElse(false);
         if (adult) throw new GeneralException(ErrorStatus.ADULT_TRANSITIONED);
         return parent;
