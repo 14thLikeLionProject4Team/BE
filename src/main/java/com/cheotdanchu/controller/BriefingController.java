@@ -7,6 +7,8 @@ import com.cheotdanchu.service.BriefingService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,5 +31,14 @@ public class BriefingController {
             @RequestHeader("X-Persona-Id") Long personaId,
             @RequestParam(required = false) Long cursor) {
         return ApiResponse.onSuccess(SuccessStatus.BRIEFING_LIST_OK, briefingService.getBriefings(personaId, cursor));
+    }
+
+    @Operation(summary = "브리핑 읽음 처리", description = "부모 전용. 읽은 브리핑은 isNew=false가 되어 화면에서 첫 줄만 남고 접힌다. 다른 가족의 브리핑 404, 이미 읽었어도 200.")
+    @PatchMapping("/briefings/{briefingId}/read")
+    public ApiResponse<Void> markRead(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long briefingId) {
+        briefingService.markRead(personaId, briefingId);
+        return ApiResponse.onSuccess(SuccessStatus.BRIEFING_READ, null);
     }
 }

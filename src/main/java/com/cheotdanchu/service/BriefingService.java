@@ -13,6 +13,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalTime;
 import java.util.List;
 
 /**
@@ -48,6 +49,17 @@ public class BriefingService {
         List<BriefingDtos.Item> items = page.stream().limit(PAGE_SIZE).map(BriefingDtos.Item::of).toList();
         return new BriefingDtos.ListResponse(briefingRepository.countByFamilyId(familyId), items,
                 hasNext ? items.get(items.size() - 1).briefingId() : null);
+    }
+
+    /** 내 가족 브리핑만 읽음 처리한다. 다른 가족 것은 404, 이미 읽었어도 성공 */
+    @Transactional
+    public void markRead(Long personaId, Long briefingId) {
+        Long familyId = parentBeforeAdult(personaId).getFamily().getFamilyId();
+        Briefing briefing = briefingRepository.findById(briefingId)
+                .filter(b -> b.getFamilyId().equals(familyId))
+                .orElseThrow(() -> new GeneralException(ErrorStatus.BRIEFING_NOT_FOUND));
+        // 다른 기록 시각과 맞춰 데모 기준일 + 지금 시각
+        briefing.markRead(seedRepository.today().atTime(LocalTime.now().withNano(0)));
     }
 
     private Member parentBeforeAdult(Long personaId) {

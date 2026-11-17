@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -78,6 +79,29 @@ class BriefingApiTest {
         mockMvc.perform(get("/briefings").param("cursor", cursor.toString()).header("X-Persona-Id", 1))
                 .andExpect(jsonPath("$.data.briefings.length()").value(3))
                 .andExpect(jsonPath("$.data.nextCursor").value(nullValue()));
+    }
+
+    @Test
+    void 읽음_처리하면_새로_도착이_꺼지고_다시_해도_성공한다() throws Exception {
+        Long id = jdbc.queryForObject("SELECT briefing_id FROM briefings WHERE family_id = 1 AND target_month = '2026-09'", Long.class);
+
+        for (int i = 0; i < 2; i++) {
+            mockMvc.perform(patch("/briefings/" + id + "/read").header("X-Persona-Id", 1))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message").value("브리핑을 읽음 처리했어요."));
+        }
+        mockMvc.perform(get("/briefings/latest").header("X-Persona-Id", 1))
+                .andExpect(jsonPath("$.data.isNew").value(false));
+    }
+
+    @Test
+    void 다른_가족_브리핑은_404_자녀는_403() throws Exception {
+        Long id = jdbc.queryForObject("SELECT briefing_id FROM briefings WHERE family_id = 1 AND target_month = '2026-09'", Long.class);
+        jdbc.update("INSERT INTO briefings (family_id, target_month) VALUES (2, '2026-09')");
+        Long otherFamily = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+
+        mockMvc.perform(patch("/briefings/" + otherFamily + "/read").header("X-Persona-Id", 1)).andExpect(status().isNotFound());
+        mockMvc.perform(patch("/briefings/" + id + "/read").header("X-Persona-Id", 2)).andExpect(status().isForbidden());
     }
 
     @Test
