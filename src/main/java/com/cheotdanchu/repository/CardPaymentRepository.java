@@ -1,6 +1,7 @@
 package com.cheotdanchu.repository;
 
 import com.cheotdanchu.entity.CardPayment;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -36,4 +37,33 @@ public interface CardPaymentRepository extends JpaRepository<CardPayment, Long> 
 
         Long getAmount();
     }
+
+    /** 고른 기간의 결제 수 (취소 건 포함, 페이지와 상관없는 전체) */
+    long countBySettlementIdAndMemberIdAndPaidAtGreaterThanEqualAndPaidAtLessThan(
+            Long settlementId, Long memberId, LocalDateTime from, LocalDateTime to);
+
+    /**
+     * 날짜순(최신 먼저) 한 페이지. 커서는 (결제 시각, 결제 ID) 로 이어 붙인다. 같은 시각이어도 ID 로 순서가 정해져서 건너뛰거나 겹치지 않는다.
+     * 첫 페이지는 커서에 아주 먼 미래 값을 넣는다.
+     */
+    @Query("""
+            select p from CardPayment p
+            where p.settlementId = :settlementId and p.memberId = :memberId and p.paidAt >= :from and p.paidAt < :to
+              and (p.paidAt < :cursorAt or (p.paidAt = :cursorAt and p.paymentId < :cursorId))
+            order by p.paidAt desc, p.paymentId desc
+            """)
+    List<CardPayment> pageByDate(@Param("settlementId") Long settlementId, @Param("memberId") Long memberId,
+                                 @Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+                                 @Param("cursorAt") LocalDateTime cursorAt, @Param("cursorId") Long cursorId, Pageable pageable);
+
+    /** 큰 금액순 한 페이지. 커서는 (금액, 결제 ID). 첫 페이지는 커서에 아주 큰 값을 넣는다 */
+    @Query("""
+            select p from CardPayment p
+            where p.settlementId = :settlementId and p.memberId = :memberId and p.paidAt >= :from and p.paidAt < :to
+              and (p.amount < :cursorAmount or (p.amount = :cursorAmount and p.paymentId < :cursorId))
+            order by p.amount desc, p.paymentId desc
+            """)
+    List<CardPayment> pageByAmount(@Param("settlementId") Long settlementId, @Param("memberId") Long memberId,
+                                   @Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+                                   @Param("cursorAmount") int cursorAmount, @Param("cursorId") Long cursorId, Pageable pageable);
 }

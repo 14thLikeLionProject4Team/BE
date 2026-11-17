@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 
+import static com.cheotdanchu.controller.CardPaymentFixture.insertCanceled;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -40,14 +41,6 @@ class ChildCategoryRatioApiTest {
         if (from != null) request.param("from", from);
         if (to != null) request.param("to", to);
         return mockMvc.perform(request);
-    }
-
-    /** 루피 가족의 이번 정산 기간 취소(마이너스) 결제를 넣는다. 정산 ID 는 시드 적재 순서에 기대지 않고 조회해서 쓴다 */
-    private void insertCanceled(String category, int amount, String paidAt) {
-        Long settlementId = jdbc.queryForObject(
-                "SELECT settlement_id FROM settlements WHERE family_id = 1 AND '2026-10-19' BETWEEN period_start AND period_end", Long.class);
-        jdbc.update("INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
-                + "VALUES (2, ?, '취소 가맹점', ?, ?, TRUE, ?)", settlementId, category, amount, paidAt);
     }
 
     @Test
@@ -105,7 +98,7 @@ class ChildCategoryRatioApiTest {
 
     @Test
     void 취소는_합산하고_전체_합계는_청구_예정액과_계속_같다() throws Exception {
-        insertCanceled("식사", -2000, "2026-10-18 12:00:00");
+        insertCanceled(jdbc, "식사", -2000, "2026-10-18 12:00:00");
 
         ratio(2, null, null)
                 .andExpect(jsonPath("$.data.totalAmount").value(77500))
@@ -117,8 +110,8 @@ class ChildCategoryRatioApiTest {
 
     @Test
     void 취소로_합계가_0_이하가_된_카테고리는_뺀다() throws Exception {
-        insertCanceled("문화", -6000, "2026-10-18 12:00:00"); // 문화 6,000 - 6,000 = 0
-        insertCanceled("교통", -9500, "2026-10-18 12:00:00"); // 교통 9,000 - 9,500 = -500
+        insertCanceled(jdbc, "문화", -6000, "2026-10-18 12:00:00"); // 문화 6,000 - 6,000 = 0
+        insertCanceled(jdbc, "교통", -9500, "2026-10-18 12:00:00"); // 교통 9,000 - 9,500 = -500
 
         ratio(2, null, null)
                 .andExpect(jsonPath("$.data.totalAmount").value(64500))

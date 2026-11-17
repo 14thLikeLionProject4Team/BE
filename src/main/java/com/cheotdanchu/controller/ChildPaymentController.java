@@ -27,6 +27,19 @@ public class ChildPaymentController {
         return ApiResponse.onSuccess(SuccessStatus.PAYMENT_SUMMARY_OK, childPaymentService.getSummary(personaId));
     }
 
+    @Operation(summary = "결제 목록 조회",
+            description = "자녀 전용(부모는 403). 이번 정산 기간의 카드 결제를 가맹점명·카테고리·금액과 함께 보여줍니다. sort=date(날짜순, 기본)|amount(큰 금액순), from·to 는 정산 기간 안(아니면 400), size 는 기본 20(최대 100), cursor 는 이전 응답의 nextCursor(정렬을 바꾸면 처음부터). 취소는 isCanceled=true 이고 금액이 마이너스입니다. isHighAmount 는 위험 결제(HIGH_AMOUNT)로 표시된 결제이고 기준 금액은 아직 정해지지 않았습니다. 진행 중인 정산이 없으면 빈 목록입니다.")
+    @GetMapping("/child/payments")
+    public ApiResponse<PaymentDtos.PaymentListResponse> getPayments(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String cursor) {
+        return ApiResponse.onSuccess(SuccessStatus.PAYMENT_LIST_OK, childPaymentService.getPayments(personaId, sort, from, to, size, cursor));
+    }
+
     @Operation(summary = "카테고리 비율 조회",
             description = "자녀 전용(부모는 403). 선택한 기간(기본: 이번 정산 기간 전체)의 카테고리별 합계와 비중(%, 소수 첫째 자리). 취소는 합산하고 합계가 0 이하인 카테고리는 뺍니다. from·to 는 정산 기간 안이어야 하고(아니면 400), 진행 중인 정산이 없으면 빈 목록입니다.")
     @GetMapping("/child/payments/category-ratio")

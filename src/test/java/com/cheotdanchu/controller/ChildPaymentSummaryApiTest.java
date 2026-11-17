@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
+import static com.cheotdanchu.controller.CardPaymentFixture.insertCanceled;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -61,10 +62,7 @@ class ChildPaymentSummaryApiTest {
 
     @Test
     void 취소는_금액에_합산하고_취소된_결제는_건수에서_뺀다() throws Exception {
-        Long settlementId = jdbc.queryForObject(
-                "SELECT settlement_id FROM settlements WHERE family_id = 1 AND '2026-10-19' BETWEEN period_start AND period_end", Long.class);
-        jdbc.update("INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
-                + "VALUES (2, ?, '취소 가맹점', '식사', -2000, TRUE, '2026-10-18 12:00:00')", settlementId);
+        insertCanceled(jdbc, "식사", -2000, "2026-10-18 12:00:00");
 
         summary(2)
                 .andExpect(jsonPath("$.data.billedAmount").value(77500))
@@ -88,10 +86,7 @@ class ChildPaymentSummaryApiTest {
 
     @Test
     void 취소가_있어도_자녀_홈의_현재_정산_조회와_같은_건수다() throws Exception {
-        Long settlementId = jdbc.queryForObject(
-                "SELECT settlement_id FROM settlements WHERE family_id = 1 AND '2026-10-19' BETWEEN period_start AND period_end", Long.class);
-        jdbc.update("INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
-                + "VALUES (2, ?, '취소 가맹점', '식사', -2000, TRUE, '2026-10-18 12:00:00')", settlementId);
+        insertCanceled(jdbc, "식사", -2000, "2026-10-18 12:00:00");
 
         mockMvc.perform(get("/settlements/current").header("X-Persona-Id", 2))
                 .andExpect(jsonPath("$.data.paymentCount").value(13));
@@ -100,11 +95,8 @@ class ChildPaymentSummaryApiTest {
 
     @Test
     void 모든_결제가_취소돼도_건수는_0_아래로_내려가지_않는다() throws Exception {
-        Long settlementId = jdbc.queryForObject(
-                "SELECT settlement_id FROM settlements WHERE family_id = 1 AND '2026-10-19' BETWEEN period_start AND period_end", Long.class);
         for (int i = 0; i < 16; i++) { // 결제 14건보다 취소가 더 많은 어긋난 데이터
-            jdbc.update("INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
-                    + "VALUES (2, ?, '취소 가맹점', '식사', -100, TRUE, '2026-10-18 12:00:00')", settlementId);
+            insertCanceled(jdbc, "식사", -100, "2026-10-18 12:00:00");
         }
 
         summary(2).andExpect(jsonPath("$.data.paymentCount").value(0));

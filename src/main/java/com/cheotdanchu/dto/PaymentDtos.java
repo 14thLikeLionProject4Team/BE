@@ -1,6 +1,7 @@
 package com.cheotdanchu.dto;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /** 결제 내역 화면(자녀 전용) 응답 */
@@ -22,5 +23,19 @@ public final class PaymentDtos {
             long billedAmount,
             long paymentCount,
             LocalDate dueDate
+    ) {}
+
+    /** nextCursor 는 다음 페이지를 읽을 때 그대로 돌려보내는 값(내용은 알 필요 없음). 마지막 페이지면 null. totalCount 는 페이지와 상관없는 고른 기간의 전체 결제 수 */
+    public record PaymentListResponse(List<PaymentItem> items, long totalCount, String nextCursor) {}
+
+    /** 가맹점명까지 보이는 건 아이 본인뿐이다. 취소는 isCanceled 가 true 이고 금액이 마이너스 */
+    public record PaymentItem(
+            Long paymentId,
+            LocalDateTime paidAt,
+            String merchantName,
+            String category,
+            int amount,
+            boolean isCanceled,
+            boolean isHighAmount
     ) {}
 }
