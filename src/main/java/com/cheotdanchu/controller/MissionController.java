@@ -69,6 +69,12 @@ public class MissionController {
         return ApiResponse.onSuccess(SuccessStatus.PENDING_SUBMISSIONS_OK, missionService.getPendingSubmissions(personaId));
     }
 
+    @Operation(summary = "보상 가이드 조회", description = "자녀·부모 공용. 미션 보상 참고 구간(이번 정산 기간 용돈의 3~8%, 100원 단위 내림)과 이번 달 남은 한도, 빠른 선택 금액. 미션 만들기와 미션 제안 화면이 같이 쓴다. 용돈 설정이 없으면 금액은 null.")
+    @GetMapping("/missions/reward-guide")
+    public ApiResponse<MissionQueryDtos.RewardGuideResponse> getRewardGuide(@RequestHeader("X-Persona-Id") Long personaId) {
+        return ApiResponse.onSuccess(SuccessStatus.REWARD_GUIDE_OK, missionService.getRewardGuide(personaId));
+    }
+
     @Operation(summary = "월 보상 합계 조회", description = "이번 정산 기간에 받은 미션 보상과 한 달 상한(용돈 × 상한 비율), 남은 한도. 자녀·부모 공용.")
     @GetMapping("/missions/rewards/summary")
     public ApiResponse<MissionQueryDtos.RewardSummaryResponse> getRewardSummary(@RequestHeader("X-Persona-Id") Long personaId) {
