@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -42,6 +43,22 @@ public interface CardPaymentRepository extends JpaRepository<CardPayment, Long> 
 
     interface CategoryTotal {
         String getCategory();
+
+        Long getAmount();
+    }
+
+    /** 날짜별 합계(취소는 마이너스로 합산). 결제가 없는 날은 행이 없다. from 이상 to 미만 */
+    @Query("""
+            select cast(p.paidAt as date) as day, sum(p.amount) as amount
+            from CardPayment p
+            where p.settlementId = :settlementId and p.memberId = :memberId and p.paidAt >= :from and p.paidAt < :to
+            group by cast(p.paidAt as date)
+            """)
+    List<DailyTotal> sumByDay(@Param("settlementId") Long settlementId, @Param("memberId") Long memberId,
+                              @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    interface DailyTotal {
+        LocalDate getDay();
 
         Long getAmount();
     }
