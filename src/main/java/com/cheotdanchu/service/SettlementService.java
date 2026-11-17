@@ -65,8 +65,8 @@ public class SettlementService {
         if (current.isEmpty()) return null;
 
         Snapshot s = snapshot(current.get(), account(personaId), today);
-        // 결제 건수는 현재 정산 조회에서만 쓰므로 여기서만 센다 (점검 조회는 건수를 쓰지 않음)
-        long count = cardPaymentRepository.countBySettlementIdAndCanceledFalse(s.settlement().getSettlementId());
+        // 결제 건수는 현재 정산 조회에서만 쓰므로 여기서만 센다 (점검 조회는 건수를 쓰지 않음). 취소된 결제는 뺀 순건수
+        long count = Math.max(cardPaymentRepository.countNetPayments(s.settlement().getSettlementId()), 0);
 
         return new CurrentSettlementResponse(
                 s.settlement().getSettlementId(),

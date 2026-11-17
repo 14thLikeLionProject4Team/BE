@@ -60,7 +60,7 @@ class ChildPaymentSummaryApiTest {
     }
 
     @Test
-    void 취소는_금액에_합산하고_건수에서는_뺀다() throws Exception {
+    void 취소는_금액에_합산하고_취소된_결제는_건수에서_뺀다() throws Exception {
         Long settlementId = jdbc.queryForObject(
                 "SELECT settlement_id FROM settlements WHERE family_id = 1 AND '2026-10-19' BETWEEN period_start AND period_end", Long.class);
         jdbc.update("INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
@@ -68,7 +68,7 @@ class ChildPaymentSummaryApiTest {
 
         summary(2)
                 .andExpect(jsonPath("$.data.billedAmount").value(77500))
-                .andExpect(jsonPath("$.data.paymentCount").value(14));
+                .andExpect(jsonPath("$.data.paymentCount").value(13)); // 원래 결제 1건과 취소 1건이 함께 빠진다
     }
 
     @Test
@@ -84,5 +84,29 @@ class ChildPaymentSummaryApiTest {
         summary(1)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("자녀만 조회할 수 있어요"));
+    }
+
+    @Test
+    void 취소가_있어도_자녀_홈의_현재_정산_조회와_같은_건수다() throws Exception {
+        Long settlementId = jdbc.queryForObject(
+                "SELECT settlement_id FROM settlements WHERE family_id = 1 AND '2026-10-19' BETWEEN period_start AND period_end", Long.class);
+        jdbc.update("INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
+                + "VALUES (2, ?, '취소 가맹점', '식사', -2000, TRUE, '2026-10-18 12:00:00')", settlementId);
+
+        mockMvc.perform(get("/settlements/current").header("X-Persona-Id", 2))
+                .andExpect(jsonPath("$.data.paymentCount").value(13));
+        summary(2).andExpect(jsonPath("$.data.paymentCount").value(13));
+    }
+
+    @Test
+    void 모든_결제가_취소돼도_건수는_0_아래로_내려가지_않는다() throws Exception {
+        Long settlementId = jdbc.queryForObject(
+                "SELECT settlement_id FROM settlements WHERE family_id = 1 AND '2026-10-19' BETWEEN period_start AND period_end", Long.class);
+        for (int i = 0; i < 16; i++) { // 결제 14건보다 취소가 더 많은 어긋난 데이터
+            jdbc.update("INSERT INTO card_payments (member_id, settlement_id, merchant_name, category, amount, is_canceled, paid_at) "
+                    + "VALUES (2, ?, '취소 가맹점', '식사', -100, TRUE, '2026-10-18 12:00:00')", settlementId);
+        }
+
+        summary(2).andExpect(jsonPath("$.data.paymentCount").value(0));
     }
 }
