@@ -77,7 +77,13 @@ public class GroqClient {
                 int status = res.statusCode();
 
                 if (status == 200) {
-                    Map<String, Object> parsed = JsonUtil.parseObject(extractJson(contentOf(res.body())));
+                    String content = contentOf(res.body());
+                    // 모델 답에 깨진 글자(U+FFFD)가 가끔 섞여 와요. 화면에 그대로 나가지 않게 다시 요청해요
+                    if (content != null && content.contains("�")) {
+                        log.warn("Groq 답에 깨진 글자가 있어요 (시도 {}/{})", attempt, props.maxRetries());
+                        continue;
+                    }
+                    Map<String, Object> parsed = JsonUtil.parseObject(extractJson(content));
                     if (parsed != null) return parsed;
                     log.warn("Groq 답이 JSON이 아니에요 (시도 {}/{})", attempt, props.maxRetries());
                 } else if (status == 429 || status >= 500 || res.body().contains("json_validate_failed")) {
