@@ -1,0 +1,101 @@
+package com.cheotdanchu.controller;
+
+import com.cheotdanchu.common.response.ApiResponse;
+import com.cheotdanchu.common.response.SuccessStatus;
+import com.cheotdanchu.dto.AllowanceChangeDtos;
+import com.cheotdanchu.dto.AllowanceSetupDtos;
+import com.cheotdanchu.dto.AllowanceSuggestionDtos;
+import com.cheotdanchu.entity.AllowanceChange;
+import com.cheotdanchu.entity.AllowanceSuggestion;
+import com.cheotdanchu.service.AllowanceHistoryService;
+import com.cheotdanchu.service.AllowanceSettingService;
+import com.cheotdanchu.service.AllowanceSuggestionService;
+import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RestController;
+
+import org.springframework.http.ResponseEntity;
+
+import java.util.Locale;
+
+@RestController
+@RequiredArgsConstructor
+public class AllowanceController {
+
+    private final AllowanceSuggestionService suggestionService;
+    private final AllowanceSettingService settingService;
+    private final AllowanceHistoryService historyService;
+
+    @Operation(summary = "AI 용돈 제안 조회",
+            description = "부모 전용. 부모 홈 결정 카드와 용돈 정하기 배너가 같이 쓰는 대기 중인 제안과 근거(참고 구간, 물가 상승률, 카테고리별 사용액·변동률). 대기 중인 제안이 없으면 에러가 아니라 data 가 null 입니다.")
+    @GetMapping("/allowance/suggestion")
+    public ApiResponse<AllowanceSuggestionDtos.SuggestionResponse> getSuggestion(@RequestHeader("X-Persona-Id") Long personaId) {
+        return ApiResponse.onSuccess(SuccessStatus.ALLOWANCE_SUGGESTION_OK, suggestionService.getPending(personaId));
+    }
+
+    @Operation(summary = "AI 용돈 제안 처리",
+            description = "부모 전용. status: APPLIED(다음 달 1일부터 적용, 용돈 변경 이력 + 아이 알림) 또는 KEPT(유지, 제안만 닫음). 이미 처리한 제안은 409, 다른 가족의 제안은 404.")
+    @PatchMapping("/allowance/suggestions/{suggestionId}")
+    public ApiResponse<AllowanceSuggestionDtos.DecisionResponse> decide(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @PathVariable Long suggestionId,
+            @Valid @RequestBody AllowanceSuggestionDtos.DecisionRequest request) {
+        AllowanceSuggestionDtos.DecisionResponse result = suggestionService.decide(personaId, suggestionId, request.status());
+        if (result.status() == AllowanceSuggestion.Status.KEPT) {
+            return ApiResponse.onSuccess(SuccessStatus.ALLOWANCE_SUGGESTION_KEPT, result);
+        }
+        return ApiResponse.onSuccess(SuccessStatus.ALLOWANCE_SUGGESTION_APPLIED,
+                String.format(Locale.KOREA, "%d월부터 용돈이 %,d원으로 바뀌어요.", result.effectiveFrom().getMonthValue(), result.amount()),
+                result);
+    }
+
+    @Operation(summary = "용돈 변경 알림 문구 미리보기",
+            description = "부모 전용. 저장하면 아이에게 가는 알림 문구와 지금 정해진 용돈과의 차이(diff), 적용 시작일을 미리 보여줍니다. 저장하지 않습니다. amount 는 1 이상 필수, reason 은 선택(INFLATION, SCHOOL, RENEGOTIATION, ETC). AI 제안을 따라 저장할 화면이면 suggestionId 를 함께 보내세요: 제안한 금액 그대로이고 reason 을 안 보내면 저장할 때처럼 물가 문구가 붙습니다.")
+    @GetMapping("/allowance/changes/preview")
+    public ApiResponse<AllowanceChangeDtos.PreviewResponse> preview(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @RequestParam(required = false) Integer amount,
+            @RequestParam(required = false) AllowanceChange.Reason reason,
+            @RequestParam(required = false) Long suggestionId) {
+        return ApiResponse.onSuccess(SuccessStatus.ALLOWANCE_PREVIEW_OK, settingService.preview(personaId, amount, reason, suggestionId));
+    }
+
+    @Operation(summary = "용돈 설정 화면 조회",
+            description = "부모 전용. 현재 월 용돈·보내는 날·자동이체·결제일과 바꾸는 이유 선택지, 대기 중인 AI 제안(배너)과 참고 구간. 대기 중인 제안이 없으면 pendingSuggestion 은 null, 참고 구간은 제안이 한 번도 없었을 때만 null. childId 는 선택(설정은 가족 단위).")
+    @GetMapping("/allowance/setup")
+    public ApiResponse<AllowanceSetupDtos.SetupResponse> getSetup(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @RequestParam(required = false) Long childId) {
+        return ApiResponse.onSuccess(SuccessStatus.ALLOWANCE_SETUP_OK, settingService.getSetup(personaId, childId));
+    }
+
+    @Operation(summary = "용돈 변경 저장",
+            description = "부모 전용. 월 용돈·이유와 보내는 날·자동이체·결제일을 저장합니다. 금액은 다음 달 1일부터 적용되는 변경 이력으로 남고 아이에게 알림이 갑니다. AI 제안에서 온 저장이면 suggestionId 를 함께 보내세요(그 제안이 적용 처리되고 source 가 AI_SUGGESTION).")
+    @PostMapping("/allowance/changes")
+    public ResponseEntity<ApiResponse<AllowanceChangeDtos.SaveResponse>> save(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @Valid @RequestBody AllowanceChangeDtos.SaveRequest request) {
+        AllowanceChangeDtos.SaveResponse result = settingService.save(personaId, request);
+        // 이력이 새로 생겼으면 201, 금액이 그대로여서 설정만 저장했으면 200
+        SuccessStatus status = result.changeId() != null ? SuccessStatus.ALLOWANCE_CHANGE_SAVED : SuccessStatus.ALLOWANCE_SETTING_SAVED;
+        return ResponseEntity.status(status.getCode()).body(ApiResponse.onSuccess(status, result));
+    }
+
+    @Operation(summary = "용돈 변경 이력 조회",
+            description = "부모 전용(자녀는 403). 용돈이 바뀐 이력(이전·변경 금액, 이유, 정한 사람, 적용 시작일, 만든 시각)을 최신순으로 보여줍니다. size 는 기본 20(최대 100), cursor 는 이전 응답의 nextCursor 입니다. renegotiationCount 는 이유가 RENEGOTIATION 인 변경의 전체 개수이고, prevAmount 는 처음 정한 용돈이면 null 입니다. 대기 중인 AI 제안은 아직 변경이 아니라서 들어가지 않습니다.")
+    @GetMapping("/allowance/changes")
+    public ApiResponse<AllowanceChangeDtos.HistoryResponse> getHistory(
+            @RequestHeader("X-Persona-Id") Long personaId,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String cursor) {
+        return ApiResponse.onSuccess(SuccessStatus.ALLOWANCE_HISTORY_OK, historyService.getHistory(personaId, size, cursor));
+    }
+}

@@ -37,3 +37,10 @@ out/
 .vscode/
 
 src/main/resources/application.yaml
+
+### 인증 사진 (로컬 저장) ###
+uploads/
+certificates/
+
+### 배포 비밀값 ###
+.env

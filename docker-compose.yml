@@ -1,0 +1,52 @@
+services:
+  db:
+    image: mysql:8.4
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: cheotdanchu
+      TZ: Asia/Seoul
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${DB_PASSWORD}"]
+      interval: 5s
+      retries: 20
+
+  app:
+    build: .
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/cheotdanchu?serverTimezone=Asia/Seoul
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_SQL_INIT_MODE: always
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      APP_CORS_ORIGINS: ${CORS_ORIGINS}
+      APP_UPLOAD_DIR: /app/uploads
+      APP_CERTIFICATE_DIR: /app/certificates
+      TZ: Asia/Seoul
+    volumes:
+      - uploads:/app/uploads
+      - certificates:/app/certificates
+
+  caddy:
+    image: caddy:2
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+
+volumes:
+  db_data:
+  uploads:
+  certificates:
+  caddy_data:

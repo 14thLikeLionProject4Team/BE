@@ -1,0 +1,142 @@
+package com.cheotdanchu.seed;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** 서버가 켜질 때 적재가 끝난 개발 DB를 쓰며, 테스트 안에서 적재 테이블을 비웠다가 마지막에 다시 채운다 (MySQL 필요) */
+@SpringBootTest
+class SeedLoaderTest {
+
+    @Autowired
+    JdbcTemplate jdbc;
+
+    @Autowired
+    PlatformTransactionManager txManager;
+
+    @Autowired
+    SeedLoader seedLoader;
+
+    // 계좌까지 넣은 뒤 정산에서 실패해도 계좌가 남지 않아야 한다 (남으면 다음 기동에서 "이미 적재됨"으로 착각해 건너뛴다)
+    @Test
+    void 적재_도중_실패하면_이미_넣은_계좌도_되돌려진다() {
+        clearSeededTables();
+        try {
+            SeedLoader broken = new SeedLoader(jdbc, txManager, "seed-test/broken.json");
+
+            assertThrows(IllegalStateException.class, () -> broken.run(null));
+
+            assertEquals(0, count("accounts"));
+            assertEquals(0, count("settlements"));
+        } finally {
+            seedLoader.run(null); // 다른 테스트가 쓰도록 원래 시드로 복구
+        }
+    }
+
+    // 가족 A: 2025-11 60,000원(처음) → 2026-03 70,000원(대학 입학). 2026-11 73,000원(물가·AI 제안)은 아직 적용 전이라
+    // 이력이 아니라 대기 중인 제안으로 들어간다 (부모가 "다음 달부터 적용"을 누르면 그때 이력에 생긴다)
+    @Test
+    void 용돈_변경_이력에는_적용된_것만_들어간다() {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT prev_amount, amount, effective_from, reason, source "
+                        + "FROM allowance_changes WHERE family_id = 1 ORDER BY effective_from");
+
+        assertEquals(2, rows.size());
+        assertNull(rows.get(0).get("prev_amount"));
+        assertEquals(60000, ((Number) rows.get(0).get("amount")).intValue());
+        assertEquals("INITIAL", rows.get(0).get("reason"));
+
+        assertEquals(60000, ((Number) rows.get(1).get("prev_amount")).intValue());
+        assertEquals(70000, ((Number) rows.get(1).get("amount")).intValue());
+        assertEquals("SCHOOL", rows.get(1).get("reason"));
+        assertEquals("PARENT", rows.get(1).get("source"));
+    }
+
+    // 시연에서 적용·유지 버튼을 눌러 볼 수 있게 가족 A에 대기 중인 제안을 하나 넣는다. 물가 근거는 명세 예시 값이다
+    @Test
+    void 가족A에는_대기_중인_AI_제안이_들어간다() {
+        Map<String, Object> s = jdbc.queryForMap(
+                "SELECT current_amount, suggested_amount, range_min, range_max, inflation_rate, status, explanation, "
+                        + "CAST(basis AS CHAR) AS basis, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created "
+                        + "FROM allowance_suggestions WHERE family_id = 1");
+
+        assertEquals(70000, ((Number) s.get("current_amount")).intValue());
+        assertEquals(73000, ((Number) s.get("suggested_amount")).intValue());
+        assertEquals(70000, ((Number) s.get("range_min")).intValue());
+        assertEquals(75000, ((Number) s.get("range_max")).intValue());
+        assertEquals("4.2", s.get("inflation_rate").toString());
+        assertEquals("PENDING", s.get("status"));
+        assertEquals("루피가 자주 결제하는 품목의 물가가 평균 4.2% 올랐어요.", s.get("explanation"));
+        assertEquals("2026-10-01 00:00", s.get("created"));
+        assertTrue(s.get("basis").toString().contains("식사"));
+    }
+
+    @Test
+    void 성년_가족_B에는_제안이_없다() {
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM allowance_suggestions WHERE family_id = 2", Integer.class));
+    }
+
+    @Test
+    void 가족_설정이_시드대로_들어간다() {
+        // 용돈 보내는 날 1일, 결제일 25일, 미션 상한 30%, 카드 한도 10만 원, 자동이체는 기본값(켜짐)
+        Map<String, Object> s = jdbc.queryForMap(
+                "SELECT allowance_day, settlement_day, mission_cap_rate, card_limit, auto_transfer "
+                        + "FROM family_settings WHERE family_id = 1");
+
+        assertEquals(1, ((Number) s.get("allowance_day")).intValue());
+        assertEquals(25, ((Number) s.get("settlement_day")).intValue());
+        assertEquals(30, ((Number) s.get("mission_cap_rate")).intValue());
+        assertEquals(100000, ((Number) s.get("card_limit")).intValue());
+        assertEquals(true, s.get("auto_transfer"));
+    }
+
+    // 끝난 정산의 이체(결제일 정산·부족분 갚기·자동 정산)가 해당 정산에 연결돼서 들어가고, 정산이 끝난 시각도 채워진다
+    @Test
+    void 끝난_정산의_이체와_정산이_끝난_시각이_들어간다() {
+        // 가족 A: 끝난 정산 11건마다 결제일 정산 이체 1건, 2026-03 부족분은 자동 정산 1건
+        assertEquals(11, settlementTransfers(1, "SETTLEMENT"));
+        assertEquals(1, settlementTransfers(1, "AUTO_DEDUCT"));
+        assertEquals(0, settlementTransfers(1, "SHORTFALL_PAYMENT"));
+
+        // 가족 B: 끝난 정산 27건, 부족분 갚기 3건 (직접 송금 1, 지난달까지 남은 돈 2)
+        assertEquals(27, settlementTransfers(2, "SETTLEMENT"));
+        assertEquals(3, settlementTransfers(2, "SHORTFALL_PAYMENT"));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM transfers WHERE type = 'SHORTFALL_PAYMENT' AND source = 'DIRECT'", Integer.class));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM transfers WHERE type = 'SHORTFALL_PAYMENT' AND source = 'CARRYOVER'", Integer.class));
+        // 부족분 갚기가 아닌 이체에는 갚은 방식이 없다
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM transfers WHERE type <> 'SHORTFALL_PAYMENT' AND source IS NOT NULL", Integer.class));
+
+        // 끝난 정산은 모두 끝난 시각이 있고, 정산 전인 이번 달은 없다
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM settlements WHERE status = 'COMPLETED' AND resolved_at IS NULL", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM settlements WHERE status <> 'COMPLETED' AND resolved_at IS NOT NULL", Integer.class));
+    }
+
+    private int settlementTransfers(int familyId, String type) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM transfers t JOIN settlements s ON s.settlement_id = t.settlement_id "
+                + "WHERE s.family_id = ? AND t.type = ?", Integer.class, familyId, type);
+    }
+
+    private void clearSeededTables() {
+        jdbc.update("DELETE FROM card_payments");
+        jdbc.update("DELETE FROM transfers");
+        jdbc.update("DELETE FROM settlements");
+        jdbc.update("DELETE FROM accounts");
+        jdbc.update("DELETE FROM family_settings");
+        jdbc.update("DELETE FROM allowance_changes");
+        jdbc.update("DELETE FROM allowance_suggestions");
+    }
+
+    private int count(String table) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Integer.class);
+    }
+}
